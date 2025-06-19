@@ -8,6 +8,7 @@ use crate::utils::time::{get_current_date_jst, combine_date_time_jst};
 use crate::utils::session_manager::SessionManager;
 use crate::utils::record_validator::RecordValidator;
 use poise::serenity_prelude as serenity;
+use chrono::{NaiveDate, Datelike};
 
 pub async fn handle_status_interaction(
     ctx: &serenity::Context,
@@ -32,6 +33,7 @@ pub async fn handle_status_interaction(
         // Select menu interactions
         "edit_record_select" => handle_edit_record_selected(ctx, interaction, data).await,
         "delete_record_select" => handle_delete_record_selected(ctx, interaction, data).await,
+        "history_date_select" => handle_history_date_selected(ctx, interaction, data).await,
         
         _ => {
             interaction
@@ -272,15 +274,87 @@ async fn handle_delete_record_selection(
 async fn handle_history_view(
     ctx: &serenity::Context,  
     interaction: &serenity::ComponentInteraction,
-    _data: &Data,
+    data: &Data,
 ) -> Result<(), Error> {
+    // Get user information
+    let user_id = interaction.user.id.to_string();
+    let username = interaction.user.name.clone();
+    let pool = &data.pool;
+
+    // Get user from database
+    let user = match queries::create_or_get_user(pool, &user_id, &username).await {
+        Ok(user) => user,
+        Err(e) => {
+            interaction
+                .create_response(
+                    &ctx.http,
+                    serenity::CreateInteractionResponse::Message(
+                        serenity::CreateInteractionResponseMessage::new()
+                            .content(format_error_message(&format!("ユーザー情報の取得に失敗しました: {}", e)))
+                            .ephemeral(true),
+                    ),
+                )
+                .await?;
+            return Ok(());
+        }
+    };
+
+    // Get available dates for history
+    let available_dates = match queries::get_user_available_dates(pool, user.id).await {
+        Ok(dates) => dates,
+        Err(e) => {
+            interaction
+                .create_response(
+                    &ctx.http,
+                    serenity::CreateInteractionResponse::Message(
+                        serenity::CreateInteractionResponseMessage::new()
+                            .content(format_error_message(&format!("履歴データの取得に失敗しました: {}", e)))
+                            .ephemeral(true),
+                    ),
+                )
+                .await?;
+            return Ok(());
+        }
+    };
+
+    if available_dates.is_empty() {
+        interaction
+            .create_response(
+                &ctx.http,
+                serenity::CreateInteractionResponse::Message(
+                    serenity::CreateInteractionResponseMessage::new()
+                        .content("📋 過去30日間に勤務記録がありません")
+                        .ephemeral(true),
+                ),
+            )
+            .await?;
+        return Ok(());
+    }
+
+    // Create date selection menu
+    let mut options = Vec::new();
+    
+    for date in available_dates.iter().take(20) { // Limit to 20 dates to avoid Discord limits
+        let date_str = date.format("%Y-%m-%d").to_string();
+        let display_str = format!("{} ({})", date.format("%Y/%m/%d"), get_weekday_jp(*date));
+        options.push(serenity::CreateSelectMenuOption::new(display_str, date_str));
+    }
+    
+    let select_menu = serenity::CreateSelectMenu::new(
+        "history_date_select",
+        serenity::CreateSelectMenuKind::String { options }
+    )
+    .placeholder("日付を選択してください");
+
+    let components = vec![serenity::CreateActionRow::SelectMenu(select_menu)];
+
     interaction
         .create_response(
             &ctx.http,
-            serenity::CreateInteractionResponse::Message(
+            serenity::CreateInteractionResponse::UpdateMessage(
                 serenity::CreateInteractionResponseMessage::new()
-                    .content("📋 履歴機能は今後実装予定です")
-                    .ephemeral(true),
+                    .content("📋 **履歴表示**: 表示する日付を選択してください")
+                    .components(components),
             ),
         )
         .await?;
@@ -1043,4 +1117,123 @@ async fn handle_confirm_delete_all(
     }
 
     Ok(())
+}
+
+async fn handle_history_date_selected(
+    ctx: &serenity::Context,
+    interaction: &serenity::ComponentInteraction,
+    data: &Data,
+) -> Result<(), Error> {
+    let selected_date_str = if let serenity::ComponentInteractionDataKind::StringSelect { values } = &interaction.data.kind {
+        values.first().map(|s| s.clone()).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    // Parse the selected date
+    let selected_date = match chrono::NaiveDate::parse_from_str(&selected_date_str, "%Y-%m-%d") {
+        Ok(date) => date,
+        Err(_) => {
+            interaction
+                .create_response(
+                    &ctx.http,
+                    serenity::CreateInteractionResponse::Message(
+                        serenity::CreateInteractionResponseMessage::new()
+                            .content(format_error_message("無効な日付が選択されました"))
+                            .ephemeral(true),
+                    ),
+                )
+                .await?;
+            return Ok(());
+        }
+    };
+
+    // Get user information
+    let user_id = interaction.user.id.to_string();
+    let username = interaction.user.name.clone();
+    let pool = &data.pool;
+
+    let user = match queries::create_or_get_user(pool, &user_id, &username).await {
+        Ok(user) => user,
+        Err(e) => {
+            interaction
+                .create_response(
+                    &ctx.http,
+                    serenity::CreateInteractionResponse::Message(
+                        serenity::CreateInteractionResponseMessage::new()
+                            .content(format_error_message(&format!("ユーザー情報の取得に失敗しました: {}", e)))
+                            .ephemeral(true),
+                    ),
+                )
+                .await?;
+            return Ok(());
+        }
+    };
+
+    // Get records for the selected date
+    let records = match queries::get_records_by_date(pool, user.id, selected_date).await {
+        Ok(records) => records,
+        Err(e) => {
+            interaction
+                .create_response(
+                    &ctx.http,
+                    serenity::CreateInteractionResponse::Message(
+                        serenity::CreateInteractionResponseMessage::new()
+                            .content(format_error_message(&format!("記録の取得に失敗しました: {}", e)))
+                            .ephemeral(true),
+                    ),
+                )
+                .await?;
+            return Ok(());
+        }
+    };
+
+    if records.is_empty() {
+        interaction
+            .create_response(
+                &ctx.http,
+                serenity::CreateInteractionResponse::UpdateMessage(
+                    serenity::CreateInteractionResponseMessage::new()
+                        .content(&format!("📋 {} ({}) の記録はありません", 
+                            selected_date.format("%Y/%m/%d"), 
+                            get_weekday_jp(selected_date)))
+                        .components(vec![]),
+                ),
+            )
+            .await?;
+        return Ok(());
+    }
+
+    // Format the historical records
+    let content = format!(
+        "📋 **{} ({}) の勤務記録**\n\n{}",
+        selected_date.format("%Y/%m/%d"),
+        get_weekday_jp(selected_date),
+        crate::utils::format::format_attendance_status(&records)
+    );
+
+    interaction
+        .create_response(
+            &ctx.http,
+            serenity::CreateInteractionResponse::UpdateMessage(
+                serenity::CreateInteractionResponseMessage::new()
+                    .content(&content)
+                    .components(vec![]),
+            ),
+        )
+        .await?;
+
+    Ok(())
+}
+
+fn get_weekday_jp(date: NaiveDate) -> &'static str {
+    match date.weekday() {
+        chrono::Weekday::Mon => "月",
+        chrono::Weekday::Tue => "火", 
+        chrono::Weekday::Wed => "水",
+        chrono::Weekday::Thu => "木",
+        chrono::Weekday::Fri => "金",
+        chrono::Weekday::Sat => "土",
+        chrono::Weekday::Sun => "日",
+    }
 }

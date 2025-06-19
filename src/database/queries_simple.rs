@@ -232,6 +232,75 @@ pub async fn complete_work_session(
     Ok(())
 }
 
+// Get user's available dates for history (past 30 days)
+pub async fn get_user_available_dates(
+    pool: &SqlitePool,
+    user_id: i64,
+) -> Result<Vec<NaiveDate>> {
+    let thirty_days_ago = chrono::Utc::now().date_naive() - chrono::Duration::days(30);
+    let today = chrono::Utc::now().date_naive();
+    
+    let rows = sqlx::query(
+        "SELECT DISTINCT DATE(timestamp) as record_date 
+         FROM attendance_records 
+         WHERE user_id = ? AND DATE(timestamp) >= ? AND DATE(timestamp) <= ?
+         ORDER BY record_date DESC"
+    )
+    .bind(user_id)
+    .bind(thirty_days_ago)
+    .bind(today)
+    .fetch_all(pool)
+    .await?;
+
+    let mut dates = Vec::new();
+    for row in rows {
+        let date_str: String = row.get("record_date");
+        if let Ok(date) = chrono::NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
+            dates.push(date);
+        }
+    }
+    
+    Ok(dates)
+}
+
+// Get records for a specific date (not just today)
+pub async fn get_records_by_date(
+    pool: &SqlitePool,
+    user_id: i64,
+    date: NaiveDate,
+) -> Result<Vec<AttendanceRecord>> {
+    let start_of_day = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+    let end_of_day = date.and_hms_opt(23, 59, 59).unwrap().and_utc();
+
+    let rows = sqlx::query(
+        "SELECT id, user_id, record_type, timestamp, is_modified, original_timestamp, created_at, updated_at 
+         FROM attendance_records 
+         WHERE user_id = ? AND timestamp >= ? AND timestamp <= ?
+         ORDER BY timestamp ASC"
+    )
+    .bind(user_id)
+    .bind(start_of_day)
+    .bind(end_of_day)
+    .fetch_all(pool)
+    .await?;
+
+    let mut records = Vec::new();
+    for row in rows {
+        records.push(AttendanceRecord {
+            id: row.get("id"),
+            user_id: row.get("user_id"),
+            record_type: row.get("record_type"),
+            timestamp: row.get("timestamp"),
+            is_modified: row.get("is_modified"),
+            original_timestamp: row.get("original_timestamp"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        });
+    }
+
+    Ok(records)
+}
+
 pub async fn get_work_sessions_by_date_range(
     pool: &SqlitePool,
     user_id: i64,
