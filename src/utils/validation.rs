@@ -1,9 +1,14 @@
-use crate::utils::time::parse_time_string;
+use crate::utils::time::{parse_time_string, parse_time_with_day_info};
 use anyhow::Result;
 use chrono::{NaiveTime, NaiveDate};
 
 pub fn validate_time_format(time_str: &str) -> Result<NaiveTime> {
     parse_time_string(time_str)
+}
+
+/// Validate time format and return time with next-day information for night shifts
+pub fn validate_time_format_with_day_info(time_str: &str) -> Result<(NaiveTime, bool)> {
+    parse_time_with_day_info(time_str)
 }
 
 pub fn validate_time_order(start_time: NaiveTime, end_time: NaiveTime) -> Result<()> {
