@@ -266,3 +266,61 @@ pub async fn get_work_sessions_by_date_range(
 
     Ok(sessions)
 }
+
+// Additional functions for record modification
+pub async fn update_attendance_record_time(
+    pool: &SqlitePool,
+    record_id: i64,
+    new_timestamp: DateTime<Utc>,
+) -> Result<()> {
+    // First get the current record to preserve original timestamp
+    let current_record = get_attendance_record_by_id(pool, record_id).await?;
+    let original_timestamp = if current_record.is_modified {
+        current_record.original_timestamp
+    } else {
+        Some(current_record.timestamp)
+    };
+
+    sqlx::query(
+        "UPDATE attendance_records 
+         SET timestamp = ?, is_modified = TRUE, original_timestamp = ?, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = ?"
+    )
+    .bind(new_timestamp)
+    .bind(original_timestamp)
+    .bind(record_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn delete_attendance_record(pool: &SqlitePool, record_id: i64) -> Result<()> {
+    sqlx::query("DELETE FROM attendance_records WHERE id = ?")
+        .bind(record_id)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+pub async fn delete_all_user_records_for_date(
+    pool: &SqlitePool,
+    user_id: i64,
+    date: chrono::NaiveDate,
+) -> Result<()> {
+    let start_of_day = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+    let end_of_day = date.and_hms_opt(23, 59, 59).unwrap().and_utc();
+
+    sqlx::query(
+        "DELETE FROM attendance_records 
+         WHERE user_id = ? AND timestamp >= ? AND timestamp <= ?"
+    )
+    .bind(user_id)
+    .bind(start_of_day)
+    .bind(end_of_day)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}

@@ -10,12 +10,21 @@ pub fn format_attendance_status(records: &[AttendanceRecord]) -> String {
     let mut status = String::new();
     let mut start_time: Option<DateTime<Utc>> = None;
     let mut total_minutes = 0i32;
+    let mut session_count = 0;
+
+    status.push_str("**本日の勤務記録:**\n");
 
     for record in records {
         match record.record_type.as_str() {
             "start" => {
+                if start_time.is_some() {
+                    // 前のセッションが未終了
+                    status.push_str("  ⚠️ 前回の終了記録なし\n");
+                }
+                session_count += 1;
                 status.push_str(&format!(
-                    "🟢 **開始**: {} {}\n",
+                    "#{} 🟢 **開始**: {} {}\n",
+                    session_count,
                     format_time_jst(record.timestamp),
                     if record.is_modified { "(修正済み)" } else { "" }
                 ));
@@ -23,7 +32,8 @@ pub fn format_attendance_status(records: &[AttendanceRecord]) -> String {
             }
             "end" => {
                 status.push_str(&format!(
-                    "🔴 **終了**: {} {}\n",
+                    "#{} 🔴 **終了**: {} {}\n",
+                    session_count,
                     format_time_jst(record.timestamp),
                     if record.is_modified { "(修正済み)" } else { "" }
                 ));
@@ -31,9 +41,16 @@ pub fn format_attendance_status(records: &[AttendanceRecord]) -> String {
                 if let Some(start) = start_time {
                     let duration = record.timestamp.signed_duration_since(start).num_minutes() as i32;
                     total_minutes += duration;
-                    status.push_str(&format!("  ⏱️ 勤務時間: {}\n", format_duration_minutes(duration)));
+                    status.push_str(&format!(
+                        "#{} ⏱️ 勤務時間: {}\n",
+                        session_count,
+                        format_duration_minutes(duration)
+                    ));
+                } else {
+                    status.push_str(&format!("#{} ⚠️ 対応する開始記録なし\n", session_count));
                 }
                 start_time = None;
+                status.push('\n');
             }
             _ => {}
         }
@@ -41,11 +58,15 @@ pub fn format_attendance_status(records: &[AttendanceRecord]) -> String {
 
     // If still working
     if start_time.is_some() {
-        status.push_str("⚠️ **現在勤務中**\n");
+        status.push_str(&format!("#{} ⚠️ **現在勤務中**\n\n", session_count));
     }
 
     if total_minutes > 0 {
-        status.push_str(&format!("\n📊 **本日の合計勤務時間**: {}", format_duration_minutes(total_minutes)));
+        status.push_str(&format!("📊 **本日の合計勤務時間**: {}", format_duration_minutes(total_minutes)));
+    }
+
+    if session_count > 1 {
+        status.push_str(&format!("\n🔄 **セッション数**: {}", session_count));
     }
 
     status
@@ -58,40 +79,70 @@ pub fn format_work_sessions_summary(sessions: &[WorkSession]) -> String {
 
     let mut summary = String::new();
     let mut total_minutes = 0i32;
+    let mut current_date: Option<chrono::NaiveDate> = None;
+    let mut daily_minutes = 0i32;
 
     for session in sessions {
-        summary.push_str(&format!(
-            "📅 **{}**\n",
-            session.date.format("%Y-%m-%d (%a)")
-        ));
+        // 日付が変わった場合の処理
+        if current_date != Some(session.date) {
+            // 前の日の合計を表示
+            if let Some(prev_date) = current_date {
+                if daily_minutes > 0 {
+                    summary.push_str(&format!(
+                        "   📊 **{}合計**: {}\n\n",
+                        prev_date.format("%m/%d"),
+                        format_duration_minutes(daily_minutes)
+                    ));
+                }
+            }
+
+            // 新しい日のヘッダー
+            current_date = Some(session.date);
+            daily_minutes = 0;
+            summary.push_str(&format!(
+                "📅 **{}**\n",
+                session.date.format("%Y-%m-%d (%a)")
+            ));
+        }
         
         summary.push_str(&format!(
-            "   🟢 開始: {}\n",
+            "   🟢 開始: {}",
             format_time_jst(session.start_time)
         ));
 
         if let Some(end_time) = session.end_time {
             summary.push_str(&format!(
-                "   🔴 終了: {}\n",
+                " → 🔴 終了: {}",
                 format_time_jst(end_time)
             ));
             
             if let Some(minutes) = session.total_minutes {
                 summary.push_str(&format!(
-                    "   ⏱️ 勤務時間: {}\n",
+                    " ({})",
                     format_duration_minutes(minutes)
                 ));
                 total_minutes += minutes;
+                daily_minutes += minutes;
             }
+            summary.push('\n');
         } else {
-            summary.push_str("   ⚠️ 未終了\n");
+            summary.push_str(" → ⚠️ **未終了**\n");
         }
-        
-        summary.push('\n');
+    }
+
+    // 最後の日の合計を表示
+    if let Some(last_date) = current_date {
+        if daily_minutes > 0 {
+            summary.push_str(&format!(
+                "   📊 **{}合計**: {}\n\n",
+                last_date.format("%m/%d"),
+                format_duration_minutes(daily_minutes)
+            ));
+        }
     }
 
     if total_minutes > 0 {
-        summary.push_str(&format!("📊 **合計勤務時間**: {}", format_duration_minutes(total_minutes)));
+        summary.push_str(&format!("🎯 **総合計勤務時間**: {}", format_duration_minutes(total_minutes)));
     }
 
     summary

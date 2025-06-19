@@ -35,7 +35,7 @@ pub struct WorkSession {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum RecordType {
     Start,
     End,

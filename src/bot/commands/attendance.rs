@@ -3,6 +3,7 @@ use crate::database::queries;
 use crate::database::models::RecordType;
 use crate::utils::time::{get_current_date_jst, get_current_datetime_jst};
 use crate::utils::format::{format_success_message, format_error_message};
+use crate::utils::session_manager::SessionManager;
 
 /// 勤務を開始します
 #[poise::command(slash_command)]
@@ -37,20 +38,17 @@ pub async fn start(ctx: Context<'_>) -> Result<(), Error> {
     // Create attendance record
     match queries::create_attendance_record(pool, user.id, RecordType::Start, current_datetime).await {
         Ok(_) => {
-            // Create work session
-            match queries::create_work_session(pool, user.id, current_datetime, current_date).await {
-                Ok(_) => {
-                    let msg = format_success_message(&format!(
-                        "勤務を開始しました（{}）",
-                        crate::utils::time::format_time_jst(current_datetime)
-                    ));
-                    ctx.say(msg).await?;
-                }
-                Err(e) => {
-                    let msg = format_error_message(&format!("勤務セッションの作成に失敗しました: {}", e));
-                    ctx.say(msg).await?;
-                }
+            // Recalculate sessions after adding start record
+            let session_manager = SessionManager::new(pool.clone());
+            if let Err(e) = session_manager.trigger_recalculation(user.id, current_date).await {
+                tracing::error!("Failed to recalculate sessions: {}", e);
             }
+
+            let msg = format_success_message(&format!(
+                "勤務を開始しました（{}）",
+                crate::utils::time::format_time_jst(current_datetime)
+            ));
+            ctx.say(msg).await?;
         }
         Err(e) => {
             let msg = format_error_message(&format!("勤務記録の作成に失敗しました: {}", e));
@@ -98,24 +96,21 @@ pub async fn end(ctx: Context<'_>) -> Result<(), Error> {
     // Create attendance record
     match queries::create_attendance_record(pool, user.id, RecordType::End, current_datetime).await {
         Ok(_) => {
-            // Complete work session
-            match queries::complete_work_session(pool, active_session.id, current_datetime).await {
-                Ok(_) => {
-                    let duration = current_datetime.signed_duration_since(active_session.start_time);
-                    let duration_str = crate::utils::time::format_duration_minutes(duration.num_minutes() as i32);
-                    
-                    let msg = format_success_message(&format!(
-                        "勤務を終了しました（{}）\n勤務時間: {}",
-                        crate::utils::time::format_time_jst(current_datetime),
-                        duration_str
-                    ));
-                    ctx.say(msg).await?;
-                }
-                Err(e) => {
-                    let msg = format_error_message(&format!("勤務セッションの完了に失敗しました: {}", e));
-                    ctx.say(msg).await?;
-                }
+            // Recalculate sessions after adding end record
+            let session_manager = SessionManager::new(pool.clone());
+            if let Err(e) = session_manager.trigger_recalculation(user.id, get_current_date_jst()).await {
+                tracing::error!("Failed to recalculate sessions: {}", e);
             }
+
+            let duration = current_datetime.signed_duration_since(active_session.start_time);
+            let duration_str = crate::utils::time::format_duration_minutes(duration.num_minutes() as i32);
+            
+            let msg = format_success_message(&format!(
+                "勤務を終了しました（{}）\n勤務時間: {}",
+                crate::utils::time::format_time_jst(current_datetime),
+                duration_str
+            ));
+            ctx.say(msg).await?;
         }
         Err(e) => {
             let msg = format_error_message(&format!("勤務記録の作成に失敗しました: {}", e));

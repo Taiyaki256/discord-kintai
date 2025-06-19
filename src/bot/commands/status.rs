@@ -2,6 +2,7 @@ use crate::bot::{Context, Error};
 use crate::database::queries;
 use crate::utils::time::get_current_date_jst;
 use crate::utils::format::{format_attendance_status, format_error_message};
+use crate::utils::record_selector::RecordSelector;
 use poise::serenity_prelude as serenity;
 
 /// 現在の勤務状況を確認します
@@ -30,21 +31,30 @@ pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
             let header = format!("📊 **{}の勤務状況** ({})\n\n", username, current_date.format("%Y-%m-%d"));
             let full_message = format!("{}{}", header, status_text);
             
+            // Create record selector for available actions
+            let record_selector = RecordSelector::new(records.clone());
+            
             // Create interactive buttons
-            let components = vec![serenity::CreateActionRow::Buttons(vec![
-                serenity::CreateButton::new("time_edit")
-                    .label("🕐 時間修正")
-                    .style(serenity::ButtonStyle::Primary),
-                serenity::CreateButton::new("end_register")
-                    .label("✅ 終了登録")
+            let mut buttons = vec![
+                serenity::CreateButton::new("record_add")
+                    .label("✅ 記録追加")
                     .style(serenity::ButtonStyle::Success),
-                serenity::CreateButton::new("delete_record")
-                    .label("🗑️ 削除")
-                    .style(serenity::ButtonStyle::Danger),
                 serenity::CreateButton::new("history_view")
                     .label("📋 履歴")
                     .style(serenity::ButtonStyle::Secondary),
-            ])];
+            ];
+
+            // Add edit and delete buttons only if there are records
+            if !record_selector.is_empty() {
+                buttons.insert(0, serenity::CreateButton::new("time_edit")
+                    .label("🕐 時間修正")
+                    .style(serenity::ButtonStyle::Primary));
+                buttons.insert(2, serenity::CreateButton::new("delete_record")
+                    .label("🗑️ 削除")
+                    .style(serenity::ButtonStyle::Danger));
+            }
+
+            let components = vec![serenity::CreateActionRow::Buttons(buttons)];
             
             let builder = poise::CreateReply::default()
                 .content(full_message)
