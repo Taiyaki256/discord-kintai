@@ -59,3 +59,12 @@ pub fn format_time_jst(datetime: DateTime<Utc>) -> String {
     let jst_time = datetime.with_timezone(&jst_offset);
     jst_time.format("%H:%M").to_string()
 }
+
+pub fn get_date_from_utc_timestamp(timestamp: DateTime<Utc>) -> NaiveDate {
+    let jst_offset = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
+    let jst_time = timestamp.with_timezone(&jst_offset);
+    let date = jst_time.date_naive();
+    tracing::info!("get_date_from_utc_timestamp: UTC={:?}, JST={:?}, Date={}", 
+                   timestamp, jst_time, date);
+    date
+}

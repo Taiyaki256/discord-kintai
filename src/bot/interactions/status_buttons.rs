@@ -17,36 +17,72 @@ pub async fn handle_status_interaction(
 ) -> Result<(), Error> {
     let custom_id = &interaction.data.custom_id;
     
-    match custom_id.as_str() {
-        // Button interactions
-        "time_edit" => handle_time_edit_selection(ctx, interaction, data).await,
-        "record_add" => handle_record_add(ctx, interaction, data).await,
-        "delete_record" => handle_delete_record_selection(ctx, interaction, data).await,
-        "history_view" => handle_history_view(ctx, interaction, data).await,
-        "add_start_record" => handle_add_start_record(ctx, interaction, data).await,
-        "add_end_record" => handle_add_end_record(ctx, interaction, data).await,
-        "cancel_add" => handle_cancel_action(ctx, interaction, data).await,
-        "confirm_delete_single" => handle_confirm_delete_single(ctx, interaction, data).await,
-        "confirm_delete_all" => handle_confirm_delete_all(ctx, interaction, data).await,
-        "cancel_delete" => handle_cancel_action(ctx, interaction, data).await,
+    // Extract action and user ID from custom_id (format: "action:user_id")
+    let parts: Vec<&str> = custom_id.split(':').collect();
+    if parts.len() == 2 {
+        let action = parts[0];
+        let original_user_id = parts[1];
         
-        // Select menu interactions
-        "edit_record_select" => handle_edit_record_selected(ctx, interaction, data).await,
-        "delete_record_select" => handle_delete_record_selected(ctx, interaction, data).await,
-        "history_date_select" => handle_history_date_selected(ctx, interaction, data).await,
-        
-        _ => {
+        // Verify user has permission to interact with this status message
+        if interaction.user.id.to_string() != original_user_id {
             interaction
                 .create_response(
                     &ctx.http,
                     serenity::CreateInteractionResponse::Message(
                         serenity::CreateInteractionResponseMessage::new()
-                            .content("未実装の機能です")
+                            .content("❌ 他のユーザーの勤務状況は操作できません")
                             .ephemeral(true),
                     ),
                 )
                 .await?;
-            Ok(())
+            return Ok(());
+        }
+        
+        match action {
+            "time_edit" => handle_time_edit_selection(ctx, interaction, data).await,
+            "record_add" => handle_record_add(ctx, interaction, data).await,
+            "delete_record" => handle_delete_record_selection(ctx, interaction, data).await,
+            "history_view" => handle_history_view(ctx, interaction, data).await,
+            "add_start_record" => handle_add_start_record(ctx, interaction, data).await,
+            "add_end_record" => handle_add_end_record(ctx, interaction, data).await,
+            "cancel_add" => handle_cancel_action(ctx, interaction, data).await,
+            "confirm_delete_single" => handle_confirm_delete_single(ctx, interaction, data).await,
+            "confirm_delete_all" => handle_confirm_delete_all(ctx, interaction, data).await,
+            "cancel_delete" => handle_cancel_action(ctx, interaction, data).await,
+            _ => {
+                interaction
+                    .create_response(
+                        &ctx.http,
+                        serenity::CreateInteractionResponse::Message(
+                            serenity::CreateInteractionResponseMessage::new()
+                                .content("未実装の機能です")
+                                .ephemeral(true),
+                        ),
+                    )
+                    .await?;
+                Ok(())
+            }
+        }
+    } else {
+        // Handle cases without user ID (select menus, etc.)
+        match custom_id.as_str() {
+            // Select menu interactions
+            "edit_record_select" => handle_edit_record_selected(ctx, interaction, data).await,
+            "delete_record_select" => handle_delete_record_selected(ctx, interaction, data).await,
+            "history_date_select" => handle_history_date_selected(ctx, interaction, data).await,
+            _ => {
+                interaction
+                    .create_response(
+                        &ctx.http,
+                        serenity::CreateInteractionResponse::Message(
+                            serenity::CreateInteractionResponseMessage::new()
+                                .content("未実装の機能です")
+                                .ephemeral(true),
+                        ),
+                    )
+                    .await?;
+                Ok(())
+            }
         }
     }
 }
@@ -1237,3 +1273,4 @@ fn get_weekday_jp(date: NaiveDate) -> &'static str {
         chrono::Weekday::Sun => "日",
     }
 }
+

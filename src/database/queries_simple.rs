@@ -1,6 +1,6 @@
 use crate::database::models::{User, AttendanceRecord, WorkSession, RecordType};
 use sqlx::{SqlitePool, Row};
-use chrono::{DateTime, Utc, NaiveDate};
+use chrono::{DateTime, Utc, NaiveDate, TimeZone};
 use anyhow::Result;
 
 // User queries using simpler API without macros
@@ -68,6 +68,9 @@ pub async fn create_attendance_record(
 ) -> Result<AttendanceRecord> {
     let record_type_str = record_type.as_str();
     
+    tracing::info!("Creating attendance record - user_id: {}, type: {}, timestamp: {:?}", 
+                   user_id, record_type_str, timestamp);
+    
     let result = sqlx::query(
         "INSERT INTO attendance_records (user_id, record_type, timestamp) VALUES (?, ?, ?)"
     )
@@ -78,7 +81,12 @@ pub async fn create_attendance_record(
     .await?;
 
     let record_id = result.last_insert_rowid();
-    get_attendance_record_by_id(pool, record_id).await
+    tracing::info!("Record inserted with ID: {}", record_id);
+    
+    let record = get_attendance_record_by_id(pool, record_id).await?;
+    tracing::info!("Retrieved record: id={}, user_id={}, type={}, timestamp={:?}", 
+                   record.id, record.user_id, record.record_type, record.timestamp);
+    Ok(record)
 }
 
 pub async fn get_attendance_record_by_id(pool: &SqlitePool, record_id: i64) -> Result<AttendanceRecord> {
@@ -107,22 +115,33 @@ pub async fn get_today_records(
     user_id: i64,
     date: NaiveDate,
 ) -> Result<Vec<AttendanceRecord>> {
-    let start_of_day = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
-    let end_of_day = date.and_hms_opt(23, 59, 59).unwrap().and_utc();
+    // Convert JST date to UTC range
+    let jst_offset = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
+    let jst_start = date.and_hms_opt(0, 0, 0).unwrap();
+    let jst_end = date.succ_opt().unwrap().and_hms_opt(0, 0, 0).unwrap();
+    
+    let start_of_day = jst_offset.from_local_datetime(&jst_start).unwrap().to_utc();
+    let end_of_day = jst_offset.from_local_datetime(&jst_end).unwrap().to_utc();
 
-    let rows = sqlx::query(
-        "SELECT id, user_id, record_type, timestamp, is_modified, original_timestamp, created_at, updated_at 
+    tracing::info!("get_today_records - user_id: {}, date: {}, start_of_day: {:?}, end_of_day: {:?}", 
+                   user_id, date, start_of_day, end_of_day);
+
+    let sql = "SELECT id, user_id, record_type, timestamp, is_modified, original_timestamp, created_at, updated_at 
          FROM attendance_records 
-         WHERE user_id = ? AND timestamp >= ? AND timestamp <= ?
-         ORDER BY timestamp ASC"
-    )
+         WHERE user_id = ? AND timestamp >= ? AND timestamp < ?
+         ORDER BY timestamp ASC";
+    
+    tracing::info!("Executing SQL: {}", sql);
+    tracing::info!("With parameters: user_id={}, start={:?}, end={:?}", user_id, start_of_day, end_of_day);
+
+    let rows = sqlx::query(sql)
     .bind(user_id)
     .bind(start_of_day)
     .bind(end_of_day)
     .fetch_all(pool)
     .await?;
 
-    let records = rows.into_iter().map(|row| {
+    let records: Vec<AttendanceRecord> = rows.into_iter().map(|row| {
         AttendanceRecord {
             id: row.get("id"),
             user_id: row.get("user_id"),
@@ -134,6 +153,24 @@ pub async fn get_today_records(
             updated_at: row.get("updated_at"),
         }
     }).collect();
+
+    tracing::info!("get_today_records - Found {} records", records.len());
+
+    // Debug: Get all records for this user to see what's actually in the database
+    let all_user_records = sqlx::query(
+        "SELECT id, user_id, record_type, timestamp FROM attendance_records WHERE user_id = ? ORDER BY timestamp DESC LIMIT 10"
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    
+    tracing::info!("All recent records for user {}: count={}", user_id, all_user_records.len());
+    for row in all_user_records {
+        let id: i64 = row.get("id");
+        let timestamp: DateTime<Utc> = row.get("timestamp");
+        let record_type: String = row.get("record_type");
+        tracing::info!("  Record ID={}, type={}, timestamp={:?}", id, record_type, timestamp);
+    }
 
     Ok(records)
 }
@@ -269,13 +306,18 @@ pub async fn get_records_by_date(
     user_id: i64,
     date: NaiveDate,
 ) -> Result<Vec<AttendanceRecord>> {
-    let start_of_day = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
-    let end_of_day = date.and_hms_opt(23, 59, 59).unwrap().and_utc();
+    // Convert JST date to UTC range
+    let jst_offset = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
+    let jst_start = date.and_hms_opt(0, 0, 0).unwrap();
+    let jst_end = date.succ_opt().unwrap().and_hms_opt(0, 0, 0).unwrap();
+    
+    let start_of_day = jst_offset.from_local_datetime(&jst_start).unwrap().to_utc();
+    let end_of_day = jst_offset.from_local_datetime(&jst_end).unwrap().to_utc();
 
     let rows = sqlx::query(
         "SELECT id, user_id, record_type, timestamp, is_modified, original_timestamp, created_at, updated_at 
          FROM attendance_records 
-         WHERE user_id = ? AND timestamp >= ? AND timestamp <= ?
+         WHERE user_id = ? AND timestamp >= ? AND timestamp < ?
          ORDER BY timestamp ASC"
     )
     .bind(user_id)
@@ -378,12 +420,17 @@ pub async fn delete_all_user_records_for_date(
     user_id: i64,
     date: chrono::NaiveDate,
 ) -> Result<()> {
-    let start_of_day = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
-    let end_of_day = date.and_hms_opt(23, 59, 59).unwrap().and_utc();
+    // Convert JST date to UTC range
+    let jst_offset = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
+    let jst_start = date.and_hms_opt(0, 0, 0).unwrap();
+    let jst_end = date.succ_opt().unwrap().and_hms_opt(0, 0, 0).unwrap();
+    
+    let start_of_day = jst_offset.from_local_datetime(&jst_start).unwrap().to_utc();
+    let end_of_day = jst_offset.from_local_datetime(&jst_end).unwrap().to_utc();
 
     sqlx::query(
         "DELETE FROM attendance_records 
-         WHERE user_id = ? AND timestamp >= ? AND timestamp <= ?"
+         WHERE user_id = ? AND timestamp >= ? AND timestamp < ?"
     )
     .bind(user_id)
     .bind(start_of_day)
