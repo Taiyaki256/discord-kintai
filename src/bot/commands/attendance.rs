@@ -2,7 +2,7 @@ use crate::bot::{Context, Error};
 use crate::database::queries;
 use crate::database::models::RecordType;
 use crate::utils::time::{get_current_date_jst, get_current_datetime_jst, get_date_from_utc_timestamp};
-use crate::utils::format::{format_success_message, format_error_message};
+use crate::utils::format::{create_success_embed, create_error_embed};
 use crate::utils::session_manager::SessionManager;
 
 /// 勤務を開始します
@@ -16,8 +16,8 @@ pub async fn start(ctx: Context<'_>) -> Result<(), Error> {
     let user = match queries::create_or_get_user(pool, &user_id, &username).await {
         Ok(user) => user,
         Err(e) => {
-            let msg = format_error_message(&format!("ユーザー情報の取得に失敗しました: {}", e));
-            ctx.say(msg).await?;
+            let embed = create_error_embed("エラー", &format!("ユーザー情報の取得に失敗しました: {}", e));
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
             return Ok(());
         }
     };
@@ -32,8 +32,8 @@ pub async fn start(ctx: Context<'_>) -> Result<(), Error> {
     let today_records = match queries::get_today_records(pool, user.id, current_date).await {
         Ok(records) => records,
         Err(e) => {
-            let msg = format_error_message(&format!("勤務記録の取得に失敗しました: {}", e));
-            ctx.say(msg).await?;
+            let embed = create_error_embed("エラー", &format!("勤務記録の取得に失敗しました: {}", e));
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
             return Ok(());
         }
     };
@@ -48,11 +48,14 @@ pub async fn start(ctx: Context<'_>) -> Result<(), Error> {
     if let Some(last_record) = today_records.last() {
         tracing::info!("Last record type: {}", last_record.record_type);
         if last_record.record_type == "start" {
-            let msg = format_error_message(&format!(
-                "既に勤務中です（開始時刻: {}）。先に `/end` で終了してください。",
-                crate::utils::time::format_time_jst(last_record.timestamp)
-            ));
-            ctx.say(msg).await?;
+            let embed = create_error_embed(
+                "既に勤務中です",
+                &format!(
+                    "開始時刻: {}\n先に `/end` で終了してください。",
+                    crate::utils::time::format_time_jst(last_record.timestamp)
+                )
+            );
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
             return Ok(());
         }
     } else {
@@ -70,15 +73,18 @@ pub async fn start(ctx: Context<'_>) -> Result<(), Error> {
                 tracing::error!("Failed to recalculate sessions: {}", e);
             }
 
-            let msg = format_success_message(&format!(
-                "勤務を開始しました（{}）",
-                crate::utils::time::format_time_jst(current_datetime)
-            ));
-            ctx.say(msg).await?;
+            let embed = create_success_embed(
+                "勤務開始",
+                &format!(
+                    "勤務を開始しました\n開始時刻: {}",
+                    crate::utils::time::format_time_jst(current_datetime)
+                )
+            );
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
         }
         Err(e) => {
-            let msg = format_error_message(&format!("勤務記録の作成に失敗しました: {}", e));
-            ctx.say(msg).await?;
+            let embed = create_error_embed("エラー", &format!("勤務記録の作成に失敗しました: {}", e));
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
         }
     }
 
@@ -96,8 +102,8 @@ pub async fn end(ctx: Context<'_>) -> Result<(), Error> {
     let user = match queries::create_or_get_user(pool, &user_id, &username).await {
         Ok(user) => user,
         Err(e) => {
-            let msg = format_error_message(&format!("ユーザー情報の取得に失敗しました: {}", e));
-            ctx.say(msg).await?;
+            let embed = create_error_embed("エラー", &format!("ユーザー情報の取得に失敗しました: {}", e));
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
             return Ok(());
         }
     };
@@ -112,8 +118,8 @@ pub async fn end(ctx: Context<'_>) -> Result<(), Error> {
     let today_records = match queries::get_today_records(pool, user.id, current_date).await {
         Ok(records) => records,
         Err(e) => {
-            let msg = format_error_message(&format!("勤務記録の取得に失敗しました: {}", e));
-            ctx.say(msg).await?;
+            let embed = create_error_embed("エラー", &format!("勤務記録の取得に失敗しました: {}", e));
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
             return Ok(());
         }
     };
@@ -132,14 +138,14 @@ pub async fn end(ctx: Context<'_>) -> Result<(), Error> {
         },
         Some(record) => {
             tracing::info!("Last record is not start, it's: {}", record.record_type);
-            let msg = format_error_message("勤務中ではありません。先に `/start` で開始してください。");
-            ctx.say(msg).await?;
+            let embed = create_error_embed("勤務中ではありません", "先に `/start` で開始してください。");
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
             return Ok(());
         },
         None => {
             tracing::info!("No records found for today");
-            let msg = format_error_message("勤務中ではありません。先に `/start` で開始してください。");
-            ctx.say(msg).await?;
+            let embed = create_error_embed("勤務中ではありません", "先に `/start` で開始してください。");
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
             return Ok(());
         }
     };
@@ -156,16 +162,19 @@ pub async fn end(ctx: Context<'_>) -> Result<(), Error> {
             let duration = current_datetime.signed_duration_since(start_record.timestamp);
             let duration_str = crate::utils::time::format_duration_minutes(duration.num_minutes() as i32);
             
-            let msg = format_success_message(&format!(
-                "勤務を終了しました（{}）\n勤務時間: {}",
-                crate::utils::time::format_time_jst(current_datetime),
-                duration_str
-            ));
-            ctx.say(msg).await?;
+            let embed = create_success_embed(
+                "勤務終了",
+                &format!(
+                    "勤務を終了しました\n終了時刻: {}\n勤務時間: {}",
+                    crate::utils::time::format_time_jst(current_datetime),
+                    duration_str
+                )
+            );
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
         }
         Err(e) => {
-            let msg = format_error_message(&format!("勤務記録の作成に失敗しました: {}", e));
-            ctx.say(msg).await?;
+            let embed = create_error_embed("エラー", &format!("勤務記録の作成に失敗しました: {}", e));
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
         }
     }
 

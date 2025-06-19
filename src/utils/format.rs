@@ -1,6 +1,7 @@
 use crate::database::models::{AttendanceRecord, WorkSession};
 use crate::utils::time::{format_time_jst, format_duration_minutes};
 use chrono::{DateTime, Utc};
+use poise::serenity_prelude as serenity;
 
 pub fn format_attendance_status(records: &[AttendanceRecord]) -> String {
     if records.is_empty() {
@@ -158,4 +159,51 @@ pub fn format_success_message(message: &str) -> String {
 
 pub fn format_info_message(message: &str) -> String {
     format!("ℹ️ {}", message)
+}
+
+// Embed utility functions
+pub fn create_success_embed(title: &str, description: &str) -> serenity::CreateEmbed {
+    serenity::CreateEmbed::new()
+        .title(title)
+        .description(description)
+        .color(0x00ff00) // Green
+        .timestamp(chrono::Utc::now())
+}
+
+pub fn create_error_embed(title: &str, description: &str) -> serenity::CreateEmbed {
+    serenity::CreateEmbed::new()
+        .title(title)
+        .description(description)
+        .color(0xff0000) // Red
+        .timestamp(chrono::Utc::now())
+}
+
+pub fn create_info_embed(title: &str, description: &str) -> serenity::CreateEmbed {
+    serenity::CreateEmbed::new()
+        .title(title)
+        .description(description)
+        .color(0x3498db) // Blue
+        .timestamp(chrono::Utc::now())
+}
+
+pub fn create_status_embed(username: &str, date: chrono::NaiveDate, records: &[AttendanceRecord]) -> serenity::CreateEmbed {
+    let status_text = format_attendance_status(records);
+    serenity::CreateEmbed::new()
+        .title("📊 勤務状況")
+        .description(status_text)
+        .color(0x3498db) // Blue
+        .author(serenity::CreateEmbedAuthor::new(format!("{} の勤務状況", username)))
+        .footer(serenity::CreateEmbedFooter::new(date.format("%Y年%m月%d日").to_string()))
+        .timestamp(chrono::Utc::now())
+}
+
+pub fn create_report_embed(username: &str, title: &str, date_range: &str, sessions: &[WorkSession]) -> serenity::CreateEmbed {
+    let report_text = format_work_sessions_summary(sessions);
+    serenity::CreateEmbed::new()
+        .title(format!("📅 {}", title))
+        .description(report_text)
+        .color(0x9b59b6) // Purple
+        .author(serenity::CreateEmbedAuthor::new(format!("{} のレポート", username)))
+        .footer(serenity::CreateEmbedFooter::new(date_range))
+        .timestamp(chrono::Utc::now())
 }

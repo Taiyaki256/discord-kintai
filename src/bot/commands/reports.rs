@@ -1,7 +1,7 @@
 use crate::bot::{Context, Error};
 use crate::database::queries;
 use crate::utils::time::get_current_date_jst;
-use crate::utils::format::{format_work_sessions_summary, format_error_message};
+use crate::utils::format::{create_report_embed, create_error_embed};
 use chrono::{Datelike, Days};
 
 /// 今日の勤務レポートを表示します
@@ -15,8 +15,8 @@ pub async fn daily(ctx: Context<'_>) -> Result<(), Error> {
     let user = match queries::create_or_get_user(pool, &user_id, &username).await {
         Ok(user) => user,
         Err(e) => {
-            let msg = format_error_message(&format!("ユーザー情報の取得に失敗しました: {}", e));
-            ctx.say(msg).await?;
+            let embed = create_error_embed("エラー", &format!("ユーザー情報の取得に失敗しました: {}", e));
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
             return Ok(());
         }
     };
@@ -25,15 +25,18 @@ pub async fn daily(ctx: Context<'_>) -> Result<(), Error> {
 
     match queries::get_work_sessions_by_date_range(pool, user.id, today, today).await {
         Ok(sessions) => {
-            let report = format_work_sessions_summary(&sessions);
-            let header = format!("📅 **{}の日次レポート** ({})\n\n", username, today.format("%Y-%m-%d"));
-            let full_message = format!("{}{}", header, report);
+            let embed = create_report_embed(
+                &username,
+                "日次レポート",
+                &today.format("%Y年%m月%d日").to_string(),
+                &sessions
+            );
             
-            ctx.say(full_message).await?;
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
         }
         Err(e) => {
-            let msg = format_error_message(&format!("勤務記録の取得に失敗しました: {}", e));
-            ctx.say(msg).await?;
+            let embed = create_error_embed("エラー", &format!("勤務記録の取得に失敗しました: {}", e));
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
         }
     }
 
@@ -51,8 +54,8 @@ pub async fn weekly(ctx: Context<'_>) -> Result<(), Error> {
     let user = match queries::create_or_get_user(pool, &user_id, &username).await {
         Ok(user) => user,
         Err(e) => {
-            let msg = format_error_message(&format!("ユーザー情報の取得に失敗しました: {}", e));
-            ctx.say(msg).await?;
+            let embed = create_error_embed("エラー", &format!("ユーザー情報の取得に失敗しました: {}", e));
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
             return Ok(());
         }
     };
@@ -63,20 +66,24 @@ pub async fn weekly(ctx: Context<'_>) -> Result<(), Error> {
 
     match queries::get_work_sessions_by_date_range(pool, user.id, start_of_week, today).await {
         Ok(sessions) => {
-            let report = format_work_sessions_summary(&sessions);
-            let header = format!(
-                "📅 **{}の週次レポート** ({} ～ {})\n\n", 
-                username, 
-                start_of_week.format("%Y-%m-%d"),
-                today.format("%Y-%m-%d")
+            let date_range = format!(
+                "{} ～ {}",
+                start_of_week.format("%Y年%m月%d日"),
+                today.format("%Y年%m月%d日")
             );
-            let full_message = format!("{}{}", header, report);
             
-            ctx.say(full_message).await?;
+            let embed = create_report_embed(
+                &username,
+                "週次レポート",
+                &date_range,
+                &sessions
+            );
+            
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
         }
         Err(e) => {
-            let msg = format_error_message(&format!("勤務記録の取得に失敗しました: {}", e));
-            ctx.say(msg).await?;
+            let embed = create_error_embed("エラー", &format!("勤務記録の取得に失敗しました: {}", e));
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
         }
     }
 
@@ -94,8 +101,8 @@ pub async fn monthly(ctx: Context<'_>) -> Result<(), Error> {
     let user = match queries::create_or_get_user(pool, &user_id, &username).await {
         Ok(user) => user,
         Err(e) => {
-            let msg = format_error_message(&format!("ユーザー情報の取得に失敗しました: {}", e));
-            ctx.say(msg).await?;
+            let embed = create_error_embed("エラー", &format!("ユーザー情報の取得に失敗しました: {}", e));
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
             return Ok(());
         }
     };
@@ -106,20 +113,24 @@ pub async fn monthly(ctx: Context<'_>) -> Result<(), Error> {
 
     match queries::get_work_sessions_by_date_range(pool, user.id, start_of_month, today).await {
         Ok(sessions) => {
-            let report = format_work_sessions_summary(&sessions);
-            let header = format!(
-                "📅 **{}の月次レポート** ({} ～ {})\n\n", 
-                username, 
-                start_of_month.format("%Y-%m-%d"),
-                today.format("%Y-%m-%d")
+            let date_range = format!(
+                "{} ～ {}",
+                start_of_month.format("%Y年%m月%d日"),
+                today.format("%Y年%m月%d日")
             );
-            let full_message = format!("{}{}", header, report);
             
-            ctx.say(full_message).await?;
+            let embed = create_report_embed(
+                &username,
+                "月次レポート",
+                &date_range,
+                &sessions
+            );
+            
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
         }
         Err(e) => {
-            let msg = format_error_message(&format!("勤務記録の取得に失敗しました: {}", e));
-            ctx.say(msg).await?;
+            let embed = create_error_embed("エラー", &format!("勤務記録の取得に失敗しました: {}", e));
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
         }
     }
 

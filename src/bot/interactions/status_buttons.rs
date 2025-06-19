@@ -1,7 +1,7 @@
 use crate::bot::{Data, Error};
 use crate::database::queries;
 use crate::database::models::RecordType;
-use crate::utils::format::{format_success_message, format_error_message};
+use crate::utils::format::{format_error_message, create_success_embed, create_error_embed};
 use crate::utils::validation::validate_time_format;
 use crate::utils::record_selector::RecordSelector;
 use crate::utils::time::{get_current_date_jst, combine_date_time_jst};
@@ -25,12 +25,13 @@ pub async fn handle_status_interaction(
         
         // Verify user has permission to interact with this status message
         if interaction.user.id.to_string() != original_user_id {
+            let embed = create_error_embed("アクセス拒否", "他のユーザーの勤務状況は操作できません");
             interaction
                 .create_response(
                     &ctx.http,
                     serenity::CreateInteractionResponse::Message(
                         serenity::CreateInteractionResponseMessage::new()
-                            .content("❌ 他のユーザーの勤務状況は操作できません")
+                            .embed(embed)
                             .ephemeral(true),
                     ),
                 )
@@ -745,15 +746,16 @@ async fn handle_time_edit_modal(
                 }
             }
 
+            let embed = create_success_embed(
+                "時間修正完了", 
+                &format!("記録の時間を{}に修正しました", time_input)
+            );
             interaction
                 .create_response(
                     &ctx.http,
                     serenity::CreateInteractionResponse::Message(
                         serenity::CreateInteractionResponseMessage::new()
-                            .content(format_success_message(&format!(
-                                "記録の時間を{}に修正しました",
-                                time_input
-                            )))
+                            .embed(embed)
                             .ephemeral(true),
                     ),
                 )
@@ -891,15 +893,16 @@ async fn handle_add_start_modal(
                 tracing::error!("Failed to recalculate sessions: {}", e);
             }
 
+            let embed = create_success_embed(
+                "記録追加完了",
+                &format!("開始記録を{}に追加しました", time_input)
+            );
             interaction
                 .create_response(
                     &ctx.http,
                     serenity::CreateInteractionResponse::Message(
                         serenity::CreateInteractionResponseMessage::new()
-                            .content(format_success_message(&format!(
-                                "開始記録を{}に追加しました",
-                                time_input
-                            )))
+                            .embed(embed)
                             .ephemeral(true),
                     ),
                 )
@@ -1037,15 +1040,16 @@ async fn handle_add_end_modal(
                 tracing::error!("Failed to recalculate sessions: {}", e);
             }
 
+            let embed = create_success_embed(
+                "記録追加完了",
+                &format!("終了記録を{}に追加しました", time_input)
+            );
             interaction
                 .create_response(
                     &ctx.http,
                     serenity::CreateInteractionResponse::Message(
                         serenity::CreateInteractionResponseMessage::new()
-                            .content(format_success_message(&format!(
-                                "終了記録を{}に追加しました",
-                                time_input
-                            )))
+                            .embed(embed)
                             .ephemeral(true),
                     ),
                 )
@@ -1185,12 +1189,13 @@ async fn handle_confirm_delete_single(
                     tracing::error!("Failed to recalculate sessions: {}", e);
                 }
 
+                let embed = create_success_embed("削除完了", "選択した記録を削除しました");
                 interaction
                     .create_response(
                         &ctx.http,
                         serenity::CreateInteractionResponse::UpdateMessage(
                             serenity::CreateInteractionResponseMessage::new()
-                                .content(format_success_message("選択した記録を削除しました"))
+                                .embed(embed)
                                 .components(vec![]),
                         ),
                     )
@@ -1267,12 +1272,13 @@ async fn handle_confirm_delete_all(
                 tracing::error!("Failed to recalculate sessions: {}", e);
             }
 
+            let embed = create_success_embed("削除完了", "当日のすべての記録を削除しました");
             interaction
                 .create_response(
                     &ctx.http,
                     serenity::CreateInteractionResponse::UpdateMessage(
                         serenity::CreateInteractionResponseMessage::new()
-                            .content(format_success_message("当日のすべての記録を削除しました"))
+                            .embed(embed)
                             .components(vec![]),
                     ),
                 )

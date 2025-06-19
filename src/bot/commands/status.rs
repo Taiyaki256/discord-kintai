@@ -1,7 +1,7 @@
 use crate::bot::{Context, Error};
 use crate::database::queries;
 use crate::utils::time::get_current_date_jst;
-use crate::utils::format::{format_attendance_status, format_error_message};
+use crate::utils::format::{create_status_embed, create_error_embed};
 use crate::utils::record_selector::RecordSelector;
 use poise::serenity_prelude as serenity;
 
@@ -16,8 +16,8 @@ pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
     let user = match queries::create_or_get_user(pool, &user_id, &username).await {
         Ok(user) => user,
         Err(e) => {
-            let msg = format_error_message(&format!("ユーザー情報の取得に失敗しました: {}", e));
-            ctx.say(msg).await?;
+            let embed = create_error_embed("エラー", &format!("ユーザー情報の取得に失敗しました: {}", e));
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
             return Ok(());
         }
     };
@@ -27,10 +27,6 @@ pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
     // Get today's records
     match queries::get_today_records(pool, user.id, current_date).await {
         Ok(records) => {
-            let status_text = format_attendance_status(&records);
-            let header = format!("📊 **{}の勤務状況** ({})\n\n", username, current_date.format("%Y-%m-%d"));
-            let full_message = format!("{}{}", header, status_text);
-            
             // Create record selector for available actions
             let record_selector = RecordSelector::new(records.clone());
             
@@ -56,15 +52,17 @@ pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
 
             let components = vec![serenity::CreateActionRow::Buttons(buttons)];
             
+            let embed = create_status_embed(&username, current_date, &records);
+            
             let builder = poise::CreateReply::default()
-                .content(full_message)
+                .embed(embed)
                 .components(components);
             
             ctx.send(builder).await?;
         }
         Err(e) => {
-            let msg = format_error_message(&format!("勤務記録の取得に失敗しました: {}", e));
-            ctx.say(msg).await?;
+            let embed = create_error_embed("エラー", &format!("勤務記録の取得に失敗しました: {}", e));
+            ctx.send(poise::CreateReply::default().embed(embed)).await?;
         }
     }
 
