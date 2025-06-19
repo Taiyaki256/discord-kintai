@@ -1,6 +1,6 @@
 use crate::database::models::{AttendanceRecord, RecordType};
-use chrono::{DateTime, Utc, NaiveDate, NaiveTime, Timelike};
 use anyhow::Result;
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 
 pub struct RecordValidator;
 
@@ -15,7 +15,7 @@ impl RecordValidator {
         let mut sorted_records = existing_records.to_vec();
         sorted_records.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
 
-        // 新しい記録を挿入位置に配置して検証
+        // 新しい記録を適切な位置に挿入して検証
         let mut all_records = Vec::new();
         let mut inserted = false;
 
@@ -47,31 +47,43 @@ impl RecordValidator {
     }
 
     /// 記録シーケンスの妥当性をチェック
+    /// 複数の開始・終了記録を許可する柔軟なバリデーション
     fn validate_sequence(records: &[MockRecord]) -> Result<()> {
-        let mut expect_start = true;
-        let mut _session_count = 0;
+        if records.is_empty() {
+            return Ok(()); // 空の記録は有効
+        }
 
+        // 連続する同じタイプの記録をチェック
+        let mut last_record_type: Option<RecordType> = None;
+        let mut consecutive_count = 0;
+        
         for (i, record) in records.iter().enumerate() {
-            match record.record_type {
-                RecordType::Start => {
-                    if !expect_start {
+            match last_record_type {
+                Some(last_type) if last_type == record.record_type => {
+                    consecutive_count += 1;
+                    // 同じタイプが3回以上連続する場合は警告
+                    if consecutive_count >= 3 {
                         return Err(anyhow::anyhow!(
-                            "不正な順序: 位置{}で開始記録が連続しています（前回の終了記録がありません）",
-                            i + 1
+                            "不正な順序: 位置{}で{}記録が{}回連続しています",
+                            i + 1,
+                            if record.record_type == RecordType::Start { "開始" } else { "終了" },
+                            consecutive_count + 1
                         ));
                     }
-                    expect_start = false;
-                    _session_count += 1;
                 }
-                RecordType::End => {
-                    if expect_start {
-                        return Err(anyhow::anyhow!(
-                            "不正な順序: 位置{}で終了記録がありますが、対応する開始記録がありません",
-                            i + 1
-                        ));
-                    }
-                    expect_start = true;
+                _ => {
+                    consecutive_count = 0;
                 }
+            }
+            last_record_type = Some(record.record_type);
+        }
+
+        // 最初の記録が終了記録の場合は警告
+        if let Some(first_record) = records.first() {
+            if first_record.record_type == RecordType::End {
+                return Err(anyhow::anyhow!(
+                    "不正な順序: 開始記録なしに終了記録があります"
+                ));
             }
         }
 
@@ -103,10 +115,7 @@ impl RecordValidator {
     }
 
     /// 時間の妥当性をチェック（未来時刻、過度に古い時刻など）
-    pub fn validate_reasonable_time(
-        new_time: NaiveTime,
-        new_date: NaiveDate,
-    ) -> Result<()> {
+    pub fn validate_reasonable_time(new_time: NaiveTime, new_date: NaiveDate) -> Result<()> {
         let now = chrono::Utc::now();
         let jst_offset = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
         let now_jst = now.with_timezone(&jst_offset);
@@ -114,34 +123,21 @@ impl RecordValidator {
 
         // 未来の日付チェック
         if new_date > today_jst {
-            return Err(anyhow::anyhow!(
-                "未来の日付には記録できません"
-            ));
+            return Err(anyhow::anyhow!("未来の日付には記録できません"));
         }
 
         // 今日の場合、未来の時刻チェック
         if new_date == today_jst {
             let current_time = now_jst.time();
             if new_time > current_time {
-                return Err(anyhow::anyhow!(
-                    "未来の時刻には記録できません"
-                ));
+                return Err(anyhow::anyhow!("未来の時刻には記録できません"));
             }
         }
 
         // 過度に古い記録のチェック（7日以上前）
         let days_ago = today_jst.signed_duration_since(new_date).num_days();
         if days_ago > 7 {
-            return Err(anyhow::anyhow!(
-                "7日以上前の記録は追加できません"
-            ));
-        }
-
-        // 勤務時間として妥当な時刻かチェック（深夜2時〜朝5時は警告）
-        if new_time.hour() >= 2 && new_time.hour() < 5 {
-            return Err(anyhow::anyhow!(
-                "深夜の時間帯です。本当に正しい時刻ですか？"
-            ));
+            return Err(anyhow::anyhow!("7日以上前の記録は追加できません"));
         }
 
         Ok(())
