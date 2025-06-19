@@ -17,9 +17,9 @@ pub async fn handle_status_interaction(
 ) -> Result<(), Error> {
     let custom_id = &interaction.data.custom_id;
     
-    // Extract action and user ID from custom_id (format: "action:user_id")
+    // Extract action and user ID from custom_id (format: "action:user_id" or "action:user_id:extra")
     let parts: Vec<&str> = custom_id.split(':').collect();
-    if parts.len() == 2 {
+    if parts.len() >= 2 {
         let action = parts[0];
         let original_user_id = parts[1];
         
@@ -186,15 +186,17 @@ async fn handle_record_add(
     interaction: &serenity::ComponentInteraction,
     _data: &Data,
 ) -> Result<(), Error> {
-    // Create buttons for start/end selection
+    let user_id = interaction.user.id.to_string();
+    
+    // Create buttons for start/end selection with user ID included
     let components = vec![serenity::CreateActionRow::Buttons(vec![
-        serenity::CreateButton::new("add_start_record")
+        serenity::CreateButton::new(&format!("add_start_record:{}", user_id))
             .label("🟢 開始記録を追加")
             .style(serenity::ButtonStyle::Success),
-        serenity::CreateButton::new("add_end_record")
+        serenity::CreateButton::new(&format!("add_end_record:{}", user_id))
             .label("🔴 終了記録を追加")
             .style(serenity::ButtonStyle::Danger),
-        serenity::CreateButton::new("cancel_add")
+        serenity::CreateButton::new(&format!("cancel_add:{}", user_id))
             .label("❌ キャンセル")
             .style(serenity::ButtonStyle::Secondary),
     ])];
@@ -521,6 +523,8 @@ async fn handle_delete_record_selected(
     interaction: &serenity::ComponentInteraction,
     _data: &Data,
 ) -> Result<(), Error> {
+    let user_id = interaction.user.id.to_string();
+    
     let selected_value = if let serenity::ComponentInteractionDataKind::StringSelect { values } = &interaction.data.kind {
         values.first().map(|s| s.clone()).unwrap_or_default()
     } else {
@@ -528,16 +532,17 @@ async fn handle_delete_record_selected(
     };
 
     let (content, button_id) = if selected_value == "delete_all" {
-        ("すべての記録を削除しますか？", "confirm_delete_all")
+        ("すべての記録を削除しますか？", format!("confirm_delete_all:{}", user_id))
     } else {
-        ("選択した記録を削除しますか？", "confirm_delete_single")
+        // Include the record_id in the button for individual deletion
+        ("選択した記録を削除しますか？", format!("confirm_delete_single:{}:{}", user_id, selected_value))
     };
 
     let components = vec![serenity::CreateActionRow::Buttons(vec![
-        serenity::CreateButton::new(button_id)
+        serenity::CreateButton::new(&button_id)
             .label("🗑️ 削除する")
             .style(serenity::ButtonStyle::Danger),
-        serenity::CreateButton::new("cancel_delete")
+        serenity::CreateButton::new(&format!("cancel_delete:{}", user_id))
             .label("❌ キャンセル")
             .style(serenity::ButtonStyle::Secondary),
     ])];
@@ -1069,18 +1074,156 @@ async fn handle_add_end_modal(
 async fn handle_confirm_delete_single(
     ctx: &serenity::Context,
     interaction: &serenity::ComponentInteraction,
-    _data: &Data,
+    data: &Data,
 ) -> Result<(), Error> {
-    interaction
-        .create_response(
-            &ctx.http,
-            serenity::CreateInteractionResponse::Message(
-                serenity::CreateInteractionResponseMessage::new()
-                    .content(format_success_message("個別削除機能は今後実装予定です"))
-                    .ephemeral(true),
-            ),
-        )
-        .await?;
+    // Parse custom_id to get record_id: "confirm_delete_single:user_id:record_id"
+    let custom_id = &interaction.data.custom_id;
+    let parts: Vec<&str> = custom_id.split(':').collect();
+    
+    let record_id = if parts.len() >= 3 {
+        match parts[2].parse::<i64>() {
+            Ok(id) => id,
+            Err(_) => {
+                interaction
+                    .create_response(
+                        &ctx.http,
+                        serenity::CreateInteractionResponse::Message(
+                            serenity::CreateInteractionResponseMessage::new()
+                                .content(format_error_message("無効な記録IDです"))
+                                .ephemeral(true),
+                        ),
+                    )
+                    .await?;
+                return Ok(());
+            }
+        }
+    } else {
+        interaction
+            .create_response(
+                &ctx.http,
+                serenity::CreateInteractionResponse::Message(
+                    serenity::CreateInteractionResponseMessage::new()
+                        .content(format_error_message("記録IDが指定されていません"))
+                        .ephemeral(true),
+                ),
+            )
+            .await?;
+        return Ok(());
+    };
+
+    // Get user information
+    let user_id = interaction.user.id.to_string();
+    let username = interaction.user.name.clone();
+    let pool = &data.pool;
+
+    // Get user from database
+    let user = match queries::create_or_get_user(pool, &user_id, &username).await {
+        Ok(user) => user,
+        Err(e) => {
+            interaction
+                .create_response(
+                    &ctx.http,
+                    serenity::CreateInteractionResponse::Message(
+                        serenity::CreateInteractionResponseMessage::new()
+                            .content(format_error_message(&format!("ユーザー情報の取得に失敗しました: {}", e)))
+                            .ephemeral(true),
+                    ),
+                )
+                .await?;
+            return Ok(());
+        }
+    };
+
+    let current_date = get_current_date_jst();
+
+    // Get the specific record to verify it belongs to this user
+    let records = match queries::get_today_records(pool, user.id, current_date).await {
+        Ok(records) => records,
+        Err(e) => {
+            interaction
+                .create_response(
+                    &ctx.http,
+                    serenity::CreateInteractionResponse::Message(
+                        serenity::CreateInteractionResponseMessage::new()
+                            .content(format_error_message(&format!("勤務記録の取得に失敗しました: {}", e)))
+                            .ephemeral(true),
+                    ),
+                )
+                .await?;
+            return Ok(());
+        }
+    };
+
+    // Verify the record exists and belongs to this user
+    let record_exists = records.iter().any(|record| record.id == record_id);
+    if !record_exists {
+        interaction
+            .create_response(
+                &ctx.http,
+                serenity::CreateInteractionResponse::Message(
+                    serenity::CreateInteractionResponseMessage::new()
+                        .content(format_error_message("指定された記録が見つかりません"))
+                        .ephemeral(true),
+                ),
+            )
+            .await?;
+        return Ok(());
+    }
+
+    // Delete the specific record using the simple queries
+    match sqlx::query("DELETE FROM attendance_records WHERE id = ? AND user_id = ?")
+        .bind(record_id)
+        .bind(user.id)
+        .execute(pool)
+        .await
+    {
+        Ok(result) => {
+            if result.rows_affected() > 0 {
+                // Recalculate sessions after deletion
+                let session_manager = SessionManager::new(pool.clone());
+                if let Err(e) = session_manager.trigger_recalculation(user.id, current_date).await {
+                    tracing::error!("Failed to recalculate sessions: {}", e);
+                }
+
+                interaction
+                    .create_response(
+                        &ctx.http,
+                        serenity::CreateInteractionResponse::UpdateMessage(
+                            serenity::CreateInteractionResponseMessage::new()
+                                .content(format_success_message("選択した記録を削除しました"))
+                                .components(vec![]),
+                        ),
+                    )
+                    .await?;
+            } else {
+                interaction
+                    .create_response(
+                        &ctx.http,
+                        serenity::CreateInteractionResponse::Message(
+                            serenity::CreateInteractionResponseMessage::new()
+                                .content(format_error_message("記録の削除に失敗しました（記録が見つかりません）"))
+                                .ephemeral(true),
+                        ),
+                    )
+                    .await?;
+            }
+        }
+        Err(e) => {
+            interaction
+                .create_response(
+                    &ctx.http,
+                    serenity::CreateInteractionResponse::Message(
+                        serenity::CreateInteractionResponseMessage::new()
+                            .content(format_error_message(&format!(
+                                "記録の削除に失敗しました: {}",
+                                e
+                            )))
+                            .ephemeral(true),
+                    ),
+                )
+                .await?;
+        }
+    }
 
     Ok(())
 }
