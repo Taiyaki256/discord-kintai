@@ -30,7 +30,7 @@ pub fn parse_time_string(time_str: &str) -> Result<NaiveTime> {
         let minute_str = &time_str[colon_pos + 1..];
 
         if let (Ok(hour), Ok(minute)) = (hour_str.parse::<u32>(), minute_str.parse::<u32>()) {
-            if hour >= 24 && hour < 48 && minute < 60 {
+            if (24..48).contains(&hour) && minute < 60 {
                 // Convert 24+ hour to 0-23 hour for next day
                 let adjusted_hour = hour - 24;
                 if let Some(time) = NaiveTime::from_hms_opt(adjusted_hour, minute, 0) {
@@ -74,7 +74,7 @@ pub fn parse_time_with_day_info(time_str: &str) -> Result<(NaiveTime, bool)> {
         let minute_str = &time_str[colon_pos + 1..];
 
         if let (Ok(hour), Ok(minute)) = (hour_str.parse::<u32>(), minute_str.parse::<u32>()) {
-            if hour >= 24 && hour < 48 && minute < 60 {
+            if (24..48).contains(&hour) && minute < 60 {
                 // Convert 24+ hour to 0-23 hour for next day
                 let adjusted_hour = hour - 24;
                 if let Some(time) = NaiveTime::from_hms_opt(adjusted_hour, minute, 0) {

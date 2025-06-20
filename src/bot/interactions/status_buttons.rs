@@ -200,13 +200,13 @@ async fn handle_record_add(
 
     // Create buttons for start/end selection with user ID included
     let components = vec![serenity::CreateActionRow::Buttons(vec![
-        serenity::CreateButton::new(&format!("add_start_record:{}", user_id))
+        serenity::CreateButton::new(format!("add_start_record:{}", user_id))
             .label("🟢 開始記録を追加")
             .style(serenity::ButtonStyle::Success),
-        serenity::CreateButton::new(&format!("add_end_record:{}", user_id))
+        serenity::CreateButton::new(format!("add_end_record:{}", user_id))
             .label("🔴 終了記録を追加")
             .style(serenity::ButtonStyle::Danger),
-        serenity::CreateButton::new(&format!("cancel_add:{}", user_id))
+        serenity::CreateButton::new(format!("cancel_add:{}", user_id))
             .label("❌ キャンセル")
             .style(serenity::ButtonStyle::Secondary),
     ])];
@@ -497,7 +497,7 @@ async fn handle_edit_record_selected(
         if let serenity::ComponentInteractionDataKind::StringSelect { values } =
             &interaction.data.kind
         {
-            values.first().map(|s| s.clone()).unwrap_or_default()
+            values.first().cloned().unwrap_or_default()
         } else {
             String::new()
         };
@@ -542,7 +542,7 @@ async fn handle_delete_record_selected(
     let selected_value = if let serenity::ComponentInteractionDataKind::StringSelect { values } =
         &interaction.data.kind
     {
-        values.first().map(|s| s.clone()).unwrap_or_default()
+        values.first().cloned().unwrap_or_default()
     } else {
         String::new()
     };
@@ -564,7 +564,7 @@ async fn handle_delete_record_selected(
         serenity::CreateButton::new(&button_id)
             .label("🗑️ 削除する")
             .style(serenity::ButtonStyle::Danger),
-        serenity::CreateButton::new(&format!("cancel_delete:{}", user_id))
+        serenity::CreateButton::new(format!("cancel_delete:{}", user_id))
             .label("❌ キャンセル")
             .style(serenity::ButtonStyle::Secondary),
     ])];
@@ -574,7 +574,7 @@ async fn handle_delete_record_selected(
             &ctx.http,
             serenity::CreateInteractionResponse::UpdateMessage(
                 serenity::CreateInteractionResponseMessage::new()
-                    .content(&format!("⚠️ **確認**: {}", content))
+                    .content(format!("⚠️ **確認**: {}", content))
                     .components(components),
             ),
         )
@@ -618,9 +618,8 @@ async fn handle_time_edit_modal(
     // Get time input from modal
     let time_input = interaction
         .data
-        .components
-        .get(0)
-        .and_then(|row| row.components.get(0))
+        .components.first()
+        .and_then(|row| row.components.first())
         .and_then(|component| {
             if let serenity::ActionRowComponent::InputText(input) = component {
                 input.value.as_deref()
@@ -635,7 +634,7 @@ async fn handle_time_edit_modal(
         .data
         .components
         .get(1)
-        .and_then(|row| row.components.get(0))
+        .and_then(|row| row.components.first())
         .and_then(|component| {
             if let serenity::ActionRowComponent::InputText(input) = component {
                 input.value.as_deref()
@@ -817,9 +816,8 @@ async fn handle_add_start_modal(
 ) -> Result<(), Error> {
     let time_input = interaction
         .data
-        .components
-        .get(0)
-        .and_then(|row| row.components.get(0))
+        .components.first()
+        .and_then(|row| row.components.first())
         .and_then(|component| {
             if let serenity::ActionRowComponent::InputText(input) = component {
                 input.value.as_deref()
@@ -973,9 +971,8 @@ async fn handle_add_end_modal(
 ) -> Result<(), Error> {
     let time_input = interaction
         .data
-        .components
-        .get(0)
-        .and_then(|row| row.components.get(0))
+        .components.first()
+        .and_then(|row| row.components.first())
         .and_then(|component| {
             if let serenity::ActionRowComponent::InputText(input) = component {
                 input.value.as_deref()
@@ -1376,7 +1373,7 @@ async fn handle_history_date_selected(
     let selected_date_str = if let serenity::ComponentInteractionDataKind::StringSelect { values } =
         &interaction.data.kind
     {
-        values.first().map(|s| s.clone()).unwrap_or_default()
+        values.first().cloned().unwrap_or_default()
     } else {
         String::new()
     };
@@ -1451,7 +1448,7 @@ async fn handle_history_date_selected(
                 &ctx.http,
                 serenity::CreateInteractionResponse::UpdateMessage(
                     serenity::CreateInteractionResponseMessage::new()
-                        .content(&format!(
+                        .content(format!(
                             "📋 {} ({}) の記録はありません",
                             selected_date.format("%Y/%m/%d"),
                             get_weekday_jp(selected_date)

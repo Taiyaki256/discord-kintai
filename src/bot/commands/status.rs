@@ -35,10 +35,10 @@ pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
 
             // Create interactive buttons with user ID embedded
             let mut buttons = vec![
-                serenity::CreateButton::new(&format!("record_add:{}", user_id))
+                serenity::CreateButton::new(format!("record_add:{}", user_id))
                     .label("✅ 記録追加")
                     .style(serenity::ButtonStyle::Success),
-                serenity::CreateButton::new(&format!("history_view:{}", user_id))
+                serenity::CreateButton::new(format!("history_view:{}", user_id))
                     .label("📋 履歴")
                     .style(serenity::ButtonStyle::Secondary),
             ];
@@ -47,13 +47,13 @@ pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
             if !record_selector.is_empty() {
                 buttons.insert(
                     0,
-                    serenity::CreateButton::new(&format!("time_edit:{}", user_id))
+                    serenity::CreateButton::new(format!("time_edit:{}", user_id))
                         .label("🕐 時間修正")
                         .style(serenity::ButtonStyle::Primary),
                 );
                 buttons.insert(
                     2,
-                    serenity::CreateButton::new(&format!("delete_record:{}", user_id))
+                    serenity::CreateButton::new(format!("delete_record:{}", user_id))
                         .label("🗑️ 削除")
                         .style(serenity::ButtonStyle::Danger),
                 );
