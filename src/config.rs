@@ -15,8 +15,8 @@ impl Config {
         let discord_token = env::var("DISCORD_TOKEN")
             .map_err(|_| anyhow::anyhow!("DISCORD_TOKEN environment variable is required"))?;
 
-        let database_url = env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "sqlite:attendance.db".to_string());
+        let database_url =
+            env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:attendance.db".to_string());
 
         let admin_role_id = env::var("ADMIN_ROLE_ID").ok();
 

@@ -4,9 +4,9 @@ pub mod interactions;
 
 use crate::config::Config;
 use crate::database;
-use sqlx::SqlitePool;
 use anyhow::Result;
 use poise::serenity_prelude as serenity;
+use sqlx::SqlitePool;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Context<'a> = poise::Context<'a, Data, Error>;
@@ -19,7 +19,7 @@ pub struct Data {
 
 pub async fn create_bot(config: Config) -> Result<serenity::Client> {
     let pool = database::create_connection(&config.database_url).await?;
-    
+
     let data = Data {
         pool,
         config: config.clone(),

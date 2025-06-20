@@ -1,7 +1,7 @@
-use crate::database::models::{User, AttendanceRecord, WorkSession, RecordType};
-use sqlx::{SqlitePool, Row};
-use chrono::{DateTime, Utc, NaiveDate, TimeZone};
+use crate::database::models::{AttendanceRecord, RecordType, User, WorkSession};
 use anyhow::Result;
+use chrono::{DateTime, NaiveDate, TimeZone, Utc};
+use sqlx::{Row, SqlitePool};
 
 // User queries using simpler API without macros
 pub async fn create_or_get_user(
@@ -15,25 +15,22 @@ pub async fn create_or_get_user(
     }
 
     // Create new user if not exists
-    let result = sqlx::query(
-        "INSERT INTO users (discord_id, username) VALUES (?, ?)"
-    )
-    .bind(discord_id)
-    .bind(username)
-    .execute(pool)
-    .await?;
+    let result = sqlx::query("INSERT INTO users (discord_id, username) VALUES (?, ?)")
+        .bind(discord_id)
+        .bind(username)
+        .execute(pool)
+        .await?;
 
     let user_id = result.last_insert_rowid();
     get_user_by_id(pool, user_id).await
 }
 
 pub async fn get_user_by_discord_id(pool: &SqlitePool, discord_id: &str) -> Result<User> {
-    let row = sqlx::query(
-        "SELECT id, discord_id, username, created_at FROM users WHERE discord_id = ?"
-    )
-    .bind(discord_id)
-    .fetch_one(pool)
-    .await?;
+    let row =
+        sqlx::query("SELECT id, discord_id, username, created_at FROM users WHERE discord_id = ?")
+            .bind(discord_id)
+            .fetch_one(pool)
+            .await?;
 
     Ok(User {
         id: row.get("id"),
@@ -44,12 +41,10 @@ pub async fn get_user_by_discord_id(pool: &SqlitePool, discord_id: &str) -> Resu
 }
 
 pub async fn get_user_by_id(pool: &SqlitePool, user_id: i64) -> Result<User> {
-    let row = sqlx::query(
-        "SELECT id, discord_id, username, created_at FROM users WHERE id = ?"
-    )
-    .bind(user_id)
-    .fetch_one(pool)
-    .await?;
+    let row = sqlx::query("SELECT id, discord_id, username, created_at FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_one(pool)
+        .await?;
 
     Ok(User {
         id: row.get("id"),
@@ -67,12 +62,16 @@ pub async fn create_attendance_record(
     timestamp: DateTime<Utc>,
 ) -> Result<AttendanceRecord> {
     let record_type_str = record_type.as_str();
-    
-    tracing::info!("Creating attendance record - user_id: {}, type: {}, timestamp: {:?}", 
-                   user_id, record_type_str, timestamp);
-    
+
+    tracing::info!(
+        "Creating attendance record - user_id: {}, type: {}, timestamp: {:?}",
+        user_id,
+        record_type_str,
+        timestamp
+    );
+
     let result = sqlx::query(
-        "INSERT INTO attendance_records (user_id, record_type, timestamp) VALUES (?, ?, ?)"
+        "INSERT INTO attendance_records (user_id, record_type, timestamp) VALUES (?, ?, ?)",
     )
     .bind(user_id)
     .bind(record_type_str)
@@ -82,14 +81,22 @@ pub async fn create_attendance_record(
 
     let record_id = result.last_insert_rowid();
     tracing::info!("Record inserted with ID: {}", record_id);
-    
+
     let record = get_attendance_record_by_id(pool, record_id).await?;
-    tracing::info!("Retrieved record: id={}, user_id={}, type={}, timestamp={:?}", 
-                   record.id, record.user_id, record.record_type, record.timestamp);
+    tracing::info!(
+        "Retrieved record: id={}, user_id={}, type={}, timestamp={:?}",
+        record.id,
+        record.user_id,
+        record.record_type,
+        record.timestamp
+    );
     Ok(record)
 }
 
-pub async fn get_attendance_record_by_id(pool: &SqlitePool, record_id: i64) -> Result<AttendanceRecord> {
+pub async fn get_attendance_record_by_id(
+    pool: &SqlitePool,
+    record_id: i64,
+) -> Result<AttendanceRecord> {
     let row = sqlx::query(
         "SELECT id, user_id, record_type, timestamp, is_modified, original_timestamp, created_at, updated_at 
          FROM attendance_records WHERE id = ?"
@@ -119,30 +126,41 @@ pub async fn get_today_records(
     let jst_offset = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
     let jst_start = date.and_hms_opt(0, 0, 0).unwrap();
     let jst_end = date.succ_opt().unwrap().and_hms_opt(0, 0, 0).unwrap();
-    
+
     let start_of_day = jst_offset.from_local_datetime(&jst_start).unwrap().to_utc();
     let end_of_day = jst_offset.from_local_datetime(&jst_end).unwrap().to_utc();
 
-    tracing::info!("get_today_records - user_id: {}, date: {}, start_of_day: {:?}, end_of_day: {:?}", 
-                   user_id, date, start_of_day, end_of_day);
+    tracing::info!(
+        "get_today_records - user_id: {}, date: {}, start_of_day: {:?}, end_of_day: {:?}",
+        user_id,
+        date,
+        start_of_day,
+        end_of_day
+    );
 
     let sql = "SELECT id, user_id, record_type, timestamp, is_modified, original_timestamp, created_at, updated_at 
          FROM attendance_records 
          WHERE user_id = ? AND timestamp >= ? AND timestamp < ?
          ORDER BY timestamp ASC";
-    
+
     tracing::info!("Executing SQL: {}", sql);
-    tracing::info!("With parameters: user_id={}, start={:?}, end={:?}", user_id, start_of_day, end_of_day);
+    tracing::info!(
+        "With parameters: user_id={}, start={:?}, end={:?}",
+        user_id,
+        start_of_day,
+        end_of_day
+    );
 
     let rows = sqlx::query(sql)
-    .bind(user_id)
-    .bind(start_of_day)
-    .bind(end_of_day)
-    .fetch_all(pool)
-    .await?;
+        .bind(user_id)
+        .bind(start_of_day)
+        .bind(end_of_day)
+        .fetch_all(pool)
+        .await?;
 
-    let records: Vec<AttendanceRecord> = rows.into_iter().map(|row| {
-        AttendanceRecord {
+    let records: Vec<AttendanceRecord> = rows
+        .into_iter()
+        .map(|row| AttendanceRecord {
             id: row.get("id"),
             user_id: row.get("user_id"),
             record_type: row.get("record_type"),
@@ -151,8 +169,8 @@ pub async fn get_today_records(
             original_timestamp: row.get("original_timestamp"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
-        }
-    }).collect();
+        })
+        .collect();
 
     tracing::info!("get_today_records - Found {} records", records.len());
 
@@ -163,13 +181,22 @@ pub async fn get_today_records(
     .bind(user_id)
     .fetch_all(pool)
     .await?;
-    
-    tracing::info!("All recent records for user {}: count={}", user_id, all_user_records.len());
+
+    tracing::info!(
+        "All recent records for user {}: count={}",
+        user_id,
+        all_user_records.len()
+    );
     for row in all_user_records {
         let id: i64 = row.get("id");
         let timestamp: DateTime<Utc> = row.get("timestamp");
         let record_type: String = row.get("record_type");
-        tracing::info!("  Record ID={}, type={}, timestamp={:?}", id, record_type, timestamp);
+        tracing::info!(
+            "  Record ID={}, type={}, timestamp={:?}",
+            id,
+            record_type,
+            timestamp
+        );
     }
 
     Ok(records)
@@ -182,14 +209,13 @@ pub async fn create_work_session(
     start_time: DateTime<Utc>,
     date: NaiveDate,
 ) -> Result<WorkSession> {
-    let result = sqlx::query(
-        "INSERT INTO work_sessions (user_id, start_time, date) VALUES (?, ?, ?)"
-    )
-    .bind(user_id)
-    .bind(start_time)
-    .bind(date)
-    .execute(pool)
-    .await?;
+    let result =
+        sqlx::query("INSERT INTO work_sessions (user_id, start_time, date) VALUES (?, ?, ?)")
+            .bind(user_id)
+            .bind(start_time)
+            .bind(date)
+            .execute(pool)
+            .await?;
 
     let session_id = result.last_insert_rowid();
     get_work_session_by_id(pool, session_id).await
@@ -217,7 +243,10 @@ pub async fn get_work_session_by_id(pool: &SqlitePool, session_id: i64) -> Resul
     })
 }
 
-pub async fn get_active_work_session(pool: &SqlitePool, user_id: i64) -> Result<Option<WorkSession>> {
+pub async fn get_active_work_session(
+    pool: &SqlitePool,
+    user_id: i64,
+) -> Result<Option<WorkSession>> {
     let row_opt = sqlx::query(
         "SELECT id, user_id, start_time, end_time, total_minutes, date, is_completed, created_at, updated_at 
          FROM work_sessions 
@@ -258,7 +287,7 @@ pub async fn complete_work_session(
     sqlx::query(
         "UPDATE work_sessions 
          SET end_time = ?, total_minutes = ?, is_completed = TRUE, updated_at = CURRENT_TIMESTAMP 
-         WHERE id = ?"
+         WHERE id = ?",
     )
     .bind(end_time)
     .bind(total_minutes)
@@ -270,18 +299,15 @@ pub async fn complete_work_session(
 }
 
 // Get user's available dates for history (past 30 days)
-pub async fn get_user_available_dates(
-    pool: &SqlitePool,
-    user_id: i64,
-) -> Result<Vec<NaiveDate>> {
+pub async fn get_user_available_dates(pool: &SqlitePool, user_id: i64) -> Result<Vec<NaiveDate>> {
     let thirty_days_ago = chrono::Utc::now().date_naive() - chrono::Duration::days(30);
     let today = chrono::Utc::now().date_naive();
-    
+
     let rows = sqlx::query(
         "SELECT DISTINCT DATE(timestamp) as record_date 
          FROM attendance_records 
          WHERE user_id = ? AND DATE(timestamp) >= ? AND DATE(timestamp) <= ?
-         ORDER BY record_date DESC"
+         ORDER BY record_date DESC",
     )
     .bind(user_id)
     .bind(thirty_days_ago)
@@ -296,7 +322,7 @@ pub async fn get_user_available_dates(
             dates.push(date);
         }
     }
-    
+
     Ok(dates)
 }
 
@@ -310,7 +336,7 @@ pub async fn get_records_by_date(
     let jst_offset = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
     let jst_start = date.and_hms_opt(0, 0, 0).unwrap();
     let jst_end = date.succ_opt().unwrap().and_hms_opt(0, 0, 0).unwrap();
-    
+
     let start_of_day = jst_offset.from_local_datetime(&jst_start).unwrap().to_utc();
     let end_of_day = jst_offset.from_local_datetime(&jst_end).unwrap().to_utc();
 
@@ -361,8 +387,9 @@ pub async fn get_work_sessions_by_date_range(
     .fetch_all(pool)
     .await?;
 
-    let sessions = rows.into_iter().map(|row| {
-        WorkSession {
+    let sessions = rows
+        .into_iter()
+        .map(|row| WorkSession {
             id: row.get("id"),
             user_id: row.get("user_id"),
             start_time: row.get("start_time"),
@@ -372,8 +399,8 @@ pub async fn get_work_sessions_by_date_range(
             is_completed: row.get("is_completed"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
-        }
-    }).collect();
+        })
+        .collect();
 
     Ok(sessions)
 }
@@ -424,13 +451,13 @@ pub async fn delete_all_user_records_for_date(
     let jst_offset = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
     let jst_start = date.and_hms_opt(0, 0, 0).unwrap();
     let jst_end = date.succ_opt().unwrap().and_hms_opt(0, 0, 0).unwrap();
-    
+
     let start_of_day = jst_offset.from_local_datetime(&jst_start).unwrap().to_utc();
     let end_of_day = jst_offset.from_local_datetime(&jst_end).unwrap().to_utc();
 
     sqlx::query(
         "DELETE FROM attendance_records 
-         WHERE user_id = ? AND timestamp >= ? AND timestamp < ?"
+         WHERE user_id = ? AND timestamp >= ? AND timestamp < ?",
     )
     .bind(user_id)
     .bind(start_of_day)

@@ -1,5 +1,5 @@
 use crate::database::models::{AttendanceRecord, WorkSession};
-use crate::utils::time::{format_time_jst, format_duration_minutes};
+use crate::utils::time::{format_duration_minutes, format_time_jst};
 use chrono::{DateTime, Utc};
 use poise::serenity_prelude as serenity;
 
@@ -27,7 +27,11 @@ pub fn format_attendance_status(records: &[AttendanceRecord]) -> String {
                     "#{} 🟢 **開始**: {} {}\n",
                     session_count,
                     format_time_jst(record.timestamp),
-                    if record.is_modified { "(修正済み)" } else { "" }
+                    if record.is_modified {
+                        "(修正済み)"
+                    } else {
+                        ""
+                    }
                 ));
                 start_time = Some(record.timestamp);
             }
@@ -36,11 +40,16 @@ pub fn format_attendance_status(records: &[AttendanceRecord]) -> String {
                     "#{} 🔴 **終了**: {} {}\n",
                     session_count,
                     format_time_jst(record.timestamp),
-                    if record.is_modified { "(修正済み)" } else { "" }
+                    if record.is_modified {
+                        "(修正済み)"
+                    } else {
+                        ""
+                    }
                 ));
-                
+
                 if let Some(start) = start_time {
-                    let duration = record.timestamp.signed_duration_since(start).num_minutes() as i32;
+                    let duration =
+                        record.timestamp.signed_duration_since(start).num_minutes() as i32;
                     total_minutes += duration;
                     status.push_str(&format!(
                         "#{} ⏱️ 勤務時間: {}\n",
@@ -63,7 +72,10 @@ pub fn format_attendance_status(records: &[AttendanceRecord]) -> String {
     }
 
     if total_minutes > 0 {
-        status.push_str(&format!("📊 **本日の合計勤務時間**: {}", format_duration_minutes(total_minutes)));
+        status.push_str(&format!(
+            "📊 **本日の合計勤務時間**: {}",
+            format_duration_minutes(total_minutes)
+        ));
     }
 
     if session_count > 1 {
@@ -105,23 +117,17 @@ pub fn format_work_sessions_summary(sessions: &[WorkSession]) -> String {
                 session.date.format("%Y-%m-%d (%a)")
             ));
         }
-        
+
         summary.push_str(&format!(
             "   🟢 開始: {}",
             format_time_jst(session.start_time)
         ));
 
         if let Some(end_time) = session.end_time {
-            summary.push_str(&format!(
-                " → 🔴 終了: {}",
-                format_time_jst(end_time)
-            ));
-            
+            summary.push_str(&format!(" → 🔴 終了: {}", format_time_jst(end_time)));
+
             if let Some(minutes) = session.total_minutes {
-                summary.push_str(&format!(
-                    " ({})",
-                    format_duration_minutes(minutes)
-                ));
+                summary.push_str(&format!(" ({})", format_duration_minutes(minutes)));
                 total_minutes += minutes;
                 daily_minutes += minutes;
             }
@@ -143,7 +149,10 @@ pub fn format_work_sessions_summary(sessions: &[WorkSession]) -> String {
     }
 
     if total_minutes > 0 {
-        summary.push_str(&format!("🎯 **総合計勤務時間**: {}", format_duration_minutes(total_minutes)));
+        summary.push_str(&format!(
+            "🎯 **総合計勤務時間**: {}",
+            format_duration_minutes(total_minutes)
+        ));
     }
 
     summary
@@ -186,24 +195,41 @@ pub fn create_info_embed(title: &str, description: &str) -> serenity::CreateEmbe
         .timestamp(chrono::Utc::now())
 }
 
-pub fn create_status_embed(username: &str, date: chrono::NaiveDate, records: &[AttendanceRecord]) -> serenity::CreateEmbed {
+pub fn create_status_embed(
+    username: &str,
+    date: chrono::NaiveDate,
+    records: &[AttendanceRecord],
+) -> serenity::CreateEmbed {
     let status_text = format_attendance_status(records);
     serenity::CreateEmbed::new()
         .title("📊 勤務状況")
         .description(status_text)
         .color(0x3498db) // Blue
-        .author(serenity::CreateEmbedAuthor::new(format!("{} の勤務状況", username)))
-        .footer(serenity::CreateEmbedFooter::new(date.format("%Y年%m月%d日").to_string()))
+        .author(serenity::CreateEmbedAuthor::new(format!(
+            "{} の勤務状況",
+            username
+        )))
+        .footer(serenity::CreateEmbedFooter::new(
+            date.format("%Y年%m月%d日").to_string(),
+        ))
         .timestamp(chrono::Utc::now())
 }
 
-pub fn create_report_embed(username: &str, title: &str, date_range: &str, sessions: &[WorkSession]) -> serenity::CreateEmbed {
+pub fn create_report_embed(
+    username: &str,
+    title: &str,
+    date_range: &str,
+    sessions: &[WorkSession],
+) -> serenity::CreateEmbed {
     let report_text = format_work_sessions_summary(sessions);
     serenity::CreateEmbed::new()
         .title(format!("📅 {}", title))
         .description(report_text)
         .color(0x9b59b6) // Purple
-        .author(serenity::CreateEmbedAuthor::new(format!("{} のレポート", username)))
+        .author(serenity::CreateEmbedAuthor::new(format!(
+            "{} のレポート",
+            username
+        )))
         .footer(serenity::CreateEmbedFooter::new(date_range))
         .timestamp(chrono::Utc::now())
 }
@@ -211,14 +237,23 @@ pub fn create_report_embed(username: &str, title: &str, date_range: &str, sessio
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{TimeZone, NaiveDate};
+    use chrono::{NaiveDate, TimeZone};
 
-    fn create_test_record(id: i64, record_type: &str, hour: u32, minute: u32, is_modified: bool) -> AttendanceRecord {
+    fn create_test_record(
+        id: i64,
+        record_type: &str,
+        hour: u32,
+        minute: u32,
+        is_modified: bool,
+    ) -> AttendanceRecord {
         let jst_offset = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
         let date = NaiveDate::from_ymd_opt(2023, 12, 15).unwrap();
         let time = chrono::NaiveTime::from_hms_opt(hour, minute, 0).unwrap();
-        let datetime = jst_offset.from_local_datetime(&date.and_time(time)).unwrap().to_utc();
-        
+        let datetime = jst_offset
+            .from_local_datetime(&date.and_time(time))
+            .unwrap()
+            .to_utc();
+
         AttendanceRecord {
             id,
             user_id: 1,
@@ -232,25 +267,34 @@ mod tests {
     }
 
     fn create_test_session(
-        id: i64, 
-        start_hour: u32, 
-        start_minute: u32, 
-        end_hour: Option<u32>, 
+        id: i64,
+        start_hour: u32,
+        start_minute: u32,
+        end_hour: Option<u32>,
         end_minute: Option<u32>,
         date: NaiveDate,
     ) -> WorkSession {
         let jst_offset = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
         let start_time = chrono::NaiveTime::from_hms_opt(start_hour, start_minute, 0).unwrap();
-        let start_datetime = jst_offset.from_local_datetime(&date.and_time(start_time)).unwrap().to_utc();
-        
-        let (end_time, total_minutes, is_completed) = if let (Some(eh), Some(em)) = (end_hour, end_minute) {
-            let end_time = chrono::NaiveTime::from_hms_opt(eh, em, 0).unwrap();
-            let end_datetime = jst_offset.from_local_datetime(&date.and_time(end_time)).unwrap().to_utc();
-            let duration = end_datetime.signed_duration_since(start_datetime).num_minutes() as i32;
-            (Some(end_datetime), Some(duration), true)
-        } else {
-            (None, None, false)
-        };
+        let start_datetime = jst_offset
+            .from_local_datetime(&date.and_time(start_time))
+            .unwrap()
+            .to_utc();
+
+        let (end_time, total_minutes, is_completed) =
+            if let (Some(eh), Some(em)) = (end_hour, end_minute) {
+                let end_time = chrono::NaiveTime::from_hms_opt(eh, em, 0).unwrap();
+                let end_datetime = jst_offset
+                    .from_local_datetime(&date.and_time(end_time))
+                    .unwrap()
+                    .to_utc();
+                let duration = end_datetime
+                    .signed_duration_since(start_datetime)
+                    .num_minutes() as i32;
+                (Some(end_datetime), Some(duration), true)
+            } else {
+                (None, None, false)
+            };
 
         WorkSession {
             id,
@@ -279,7 +323,7 @@ mod tests {
             create_test_record(2, "end", 17, 30, false),
         ];
         let result = format_attendance_status(&records);
-        
+
         assert!(result.contains("**本日の勤務記録:**"));
         assert!(result.contains("#1 🟢 **開始**: 09:00"));
         assert!(result.contains("#1 🔴 **終了**: 17:30"));
@@ -295,18 +339,16 @@ mod tests {
             create_test_record(2, "end", 17, 30, true),
         ];
         let result = format_attendance_status(&records);
-        
+
         assert!(result.contains("#1 🟢 **開始**: 09:00 (修正済み)"));
         assert!(result.contains("#1 🔴 **終了**: 17:30 (修正済み)"));
     }
 
     #[test]
     fn test_format_attendance_status_currently_working() {
-        let records = vec![
-            create_test_record(1, "start", 9, 0, false),
-        ];
+        let records = vec![create_test_record(1, "start", 9, 0, false)];
         let result = format_attendance_status(&records);
-        
+
         assert!(result.contains("#1 🟢 **開始**: 09:00"));
         assert!(result.contains("#1 ⚠️ **現在勤務中**"));
         assert!(!result.contains("📊 **本日の合計勤務時間**"));
@@ -321,7 +363,7 @@ mod tests {
             create_test_record(4, "end", 17, 30, false),
         ];
         let result = format_attendance_status(&records);
-        
+
         assert!(result.contains("#1 🟢 **開始**: 09:00"));
         assert!(result.contains("#1 🔴 **終了**: 12:00"));
         assert!(result.contains("#1 ⏱️ 勤務時間: 3時間0分"));
@@ -334,11 +376,9 @@ mod tests {
 
     #[test]
     fn test_format_attendance_status_end_without_start() {
-        let records = vec![
-            create_test_record(1, "end", 17, 30, false),
-        ];
+        let records = vec![create_test_record(1, "end", 17, 30, false)];
         let result = format_attendance_status(&records);
-        
+
         assert!(result.contains("#0 🔴 **終了**: 17:30"));
         assert!(result.contains("#0 ⚠️ 対応する開始記録なし"));
     }
@@ -350,7 +390,7 @@ mod tests {
             create_test_record(2, "start", 13, 0, false),
         ];
         let result = format_attendance_status(&records);
-        
+
         assert!(result.contains("#1 🟢 **開始**: 09:00"));
         assert!(result.contains("⚠️ 前回の終了記録なし"));
         assert!(result.contains("#2 🟢 **開始**: 13:00"));
@@ -367,11 +407,9 @@ mod tests {
     #[test]
     fn test_format_work_sessions_summary_single_day() {
         let date = NaiveDate::from_ymd_opt(2023, 12, 15).unwrap();
-        let sessions = vec![
-            create_test_session(1, 9, 0, Some(17), Some(30), date),
-        ];
+        let sessions = vec![create_test_session(1, 9, 0, Some(17), Some(30), date)];
         let result = format_work_sessions_summary(&sessions);
-        
+
         assert!(result.contains("📅 **2023-12-15 (Fri)**"));
         assert!(result.contains("🟢 開始: 09:00 → 🔴 終了: 17:30 (8時間30分)"));
         assert!(result.contains("📊 **12/15合計**: 8時間30分"));
@@ -387,15 +425,15 @@ mod tests {
             create_test_session(2, 10, 0, Some(18), Some(30), date2),
         ];
         let result = format_work_sessions_summary(&sessions);
-        
+
         assert!(result.contains("📅 **2023-12-15 (Fri)**"));
         assert!(result.contains("🟢 開始: 09:00 → 🔴 終了: 17:00 (8時間0分)"));
         assert!(result.contains("📊 **12/15合計**: 8時間0分"));
-        
+
         assert!(result.contains("📅 **2023-12-16 (Sat)**"));
         assert!(result.contains("🟢 開始: 10:00 → 🔴 終了: 18:30 (8時間30分)"));
         assert!(result.contains("📊 **12/16合計**: 8時間30分"));
-        
+
         assert!(result.contains("🎯 **総合計勤務時間**: 16時間30分"));
     }
 
@@ -407,7 +445,7 @@ mod tests {
             create_test_session(2, 13, 0, None, None, date),
         ];
         let result = format_work_sessions_summary(&sessions);
-        
+
         assert!(result.contains("📅 **2023-12-15 (Fri)**"));
         assert!(result.contains("🟢 開始: 09:00 → 🔴 終了: 12:00 (3時間0分)"));
         assert!(result.contains("🟢 開始: 13:00 → ⚠️ **未終了**"));
@@ -423,7 +461,7 @@ mod tests {
             create_test_session(2, 13, 0, Some(17), Some(30), date),
         ];
         let result = format_work_sessions_summary(&sessions);
-        
+
         assert!(result.contains("📅 **2023-12-15 (Fri)**"));
         assert!(result.contains("🟢 開始: 09:00 → 🔴 終了: 12:00 (3時間0分)"));
         assert!(result.contains("🟢 開始: 13:00 → 🔴 終了: 17:30 (4時間30分)"));
@@ -452,7 +490,7 @@ mod tests {
     // Note: Testing CreateEmbed directly is not straightforward in Serenity v0.12
     // as the internal data structure is not publicly accessible.
     // These tests verify that the functions don't panic and return CreateEmbed instances.
-    
+
     #[test]
     fn test_create_success_embed() {
         let _embed = create_success_embed("テストタイトル", "テスト説明");
@@ -485,9 +523,7 @@ mod tests {
     #[test]
     fn test_create_report_embed() {
         let date = NaiveDate::from_ymd_opt(2023, 12, 15).unwrap();
-        let sessions = vec![
-            create_test_session(1, 9, 0, Some(17), Some(30), date),
-        ];
+        let sessions = vec![create_test_session(1, 9, 0, Some(17), Some(30), date)];
         let _embed = create_report_embed("テストユーザー", "日次レポート", "2023-12-15", &sessions);
         // Embed creation successful (no panic)
     }

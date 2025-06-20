@@ -56,7 +56,7 @@ impl RecordValidator {
         // 連続する同じタイプの記録をチェック
         let mut last_record_type: Option<RecordType> = None;
         let mut consecutive_count = 0;
-        
+
         for (i, record) in records.iter().enumerate() {
             match last_record_type {
                 Some(last_type) if last_type == record.record_type => {
@@ -66,7 +66,11 @@ impl RecordValidator {
                         return Err(anyhow::anyhow!(
                             "不正な順序: 位置{}で{}記録が{}回連続しています",
                             i + 1,
-                            if record.record_type == RecordType::Start { "開始" } else { "終了" },
+                            if record.record_type == RecordType::Start {
+                                "開始"
+                            } else {
+                                "終了"
+                            },
                             consecutive_count + 1
                         ));
                     }

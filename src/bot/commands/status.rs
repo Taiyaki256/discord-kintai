@@ -1,8 +1,8 @@
 use crate::bot::{Context, Error};
 use crate::database::queries;
-use crate::utils::time::get_current_date_jst;
-use crate::utils::format::{create_status_embed, create_error_embed};
+use crate::utils::format::{create_error_embed, create_status_embed};
 use crate::utils::record_selector::RecordSelector;
+use crate::utils::time::get_current_date_jst;
 use poise::serenity_prelude as serenity;
 
 /// 現在の勤務状況を確認します
@@ -16,7 +16,10 @@ pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
     let user = match queries::create_or_get_user(pool, &user_id, &username).await {
         Ok(user) => user,
         Err(e) => {
-            let embed = create_error_embed("エラー", &format!("ユーザー情報の取得に失敗しました: {}", e));
+            let embed = create_error_embed(
+                "エラー",
+                &format!("ユーザー情報の取得に失敗しました: {}", e),
+            );
             ctx.send(poise::CreateReply::default().embed(embed)).await?;
             return Ok(());
         }
@@ -29,7 +32,7 @@ pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
         Ok(records) => {
             // Create record selector for available actions
             let record_selector = RecordSelector::new(records.clone());
-            
+
             // Create interactive buttons with user ID embedded
             let mut buttons = vec![
                 serenity::CreateButton::new(&format!("record_add:{}", user_id))
@@ -42,26 +45,33 @@ pub async fn status(ctx: Context<'_>) -> Result<(), Error> {
 
             // Add edit and delete buttons only if there are records
             if !record_selector.is_empty() {
-                buttons.insert(0, serenity::CreateButton::new(&format!("time_edit:{}", user_id))
-                    .label("🕐 時間修正")
-                    .style(serenity::ButtonStyle::Primary));
-                buttons.insert(2, serenity::CreateButton::new(&format!("delete_record:{}", user_id))
-                    .label("🗑️ 削除")
-                    .style(serenity::ButtonStyle::Danger));
+                buttons.insert(
+                    0,
+                    serenity::CreateButton::new(&format!("time_edit:{}", user_id))
+                        .label("🕐 時間修正")
+                        .style(serenity::ButtonStyle::Primary),
+                );
+                buttons.insert(
+                    2,
+                    serenity::CreateButton::new(&format!("delete_record:{}", user_id))
+                        .label("🗑️ 削除")
+                        .style(serenity::ButtonStyle::Danger),
+                );
             }
 
             let components = vec![serenity::CreateActionRow::Buttons(buttons)];
-            
+
             let embed = create_status_embed(&username, current_date, &records);
-            
+
             let builder = poise::CreateReply::default()
                 .embed(embed)
                 .components(components);
-            
+
             ctx.send(builder).await?;
         }
         Err(e) => {
-            let embed = create_error_embed("エラー", &format!("勤務記録の取得に失敗しました: {}", e));
+            let embed =
+                create_error_embed("エラー", &format!("勤務記録の取得に失敗しました: {}", e));
             ctx.send(poise::CreateReply::default().embed(embed)).await?;
         }
     }

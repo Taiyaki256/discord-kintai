@@ -1,5 +1,5 @@
-use sqlx::SqlitePool;
 use anyhow::Result;
+use sqlx::SqlitePool;
 use tracing::info;
 
 pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {

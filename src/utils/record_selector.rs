@@ -13,13 +13,17 @@ impl RecordSelector {
         Self { records }
     }
 
-    pub fn create_select_menu(&self, custom_id: &str, placeholder: &str) -> Option<serenity::CreateSelectMenu> {
+    pub fn create_select_menu(
+        &self,
+        custom_id: &str,
+        placeholder: &str,
+    ) -> Option<serenity::CreateSelectMenu> {
         if self.records.is_empty() {
             return None;
         }
 
         let mut options = Vec::new();
-        
+
         for record in &self.records {
             let time_str = format_time_jst(record.timestamp);
             let type_str = match record.record_type.as_str() {
@@ -27,9 +31,13 @@ impl RecordSelector {
                 "end" => "終了",
                 _ => "不明",
             };
-            
-            let modified_indicator = if record.is_modified { " (修正済み)" } else { "" };
-            
+
+            let modified_indicator = if record.is_modified {
+                " (修正済み)"
+            } else {
+                ""
+            };
+
             let label = format!("{} {}{}", time_str, type_str, modified_indicator);
             let description = if record.is_modified {
                 if let Some(original) = record.original_timestamp {
@@ -43,7 +51,7 @@ impl RecordSelector {
 
             options.push(
                 serenity::CreateSelectMenuOption::new(label, record.id.to_string())
-                    .description(description)
+                    .description(description),
             );
         }
 
@@ -53,8 +61,11 @@ impl RecordSelector {
         }
 
         Some(
-            serenity::CreateSelectMenu::new(custom_id, serenity::CreateSelectMenuKind::String { options })
-                .placeholder(placeholder)
+            serenity::CreateSelectMenu::new(
+                custom_id,
+                serenity::CreateSelectMenuKind::String { options },
+            )
+            .placeholder(placeholder),
         )
     }
 
@@ -64,7 +75,7 @@ impl RecordSelector {
         }
 
         let mut options = Vec::new();
-        
+
         // Add individual record options
         for record in &self.records {
             let time_str = format_time_jst(record.timestamp);
@@ -73,11 +84,11 @@ impl RecordSelector {
                 "end" => "終了",
                 _ => "不明",
             };
-            
+
             let label = format!("{} {}", time_str, type_str);
             options.push(
                 serenity::CreateSelectMenuOption::new(label, record.id.to_string())
-                    .description(format!("記録ID: {}", record.id))
+                    .description(format!("記録ID: {}", record.id)),
             );
         }
 
@@ -85,7 +96,7 @@ impl RecordSelector {
         if self.records.len() > 1 {
             options.push(
                 serenity::CreateSelectMenuOption::new("🗑️ 全て削除", "delete_all")
-                    .description("当日のすべての記録を削除します")
+                    .description("当日のすべての記録を削除します"),
             );
         }
 
@@ -95,8 +106,11 @@ impl RecordSelector {
         }
 
         Some(
-            serenity::CreateSelectMenu::new(custom_id, serenity::CreateSelectMenuKind::String { options })
-                .placeholder("削除する記録を選択してください")
+            serenity::CreateSelectMenu::new(
+                custom_id,
+                serenity::CreateSelectMenuKind::String { options },
+            )
+            .placeholder("削除する記録を選択してください"),
         )
     }
 

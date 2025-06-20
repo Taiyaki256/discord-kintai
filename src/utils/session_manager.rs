@@ -1,8 +1,8 @@
 use crate::database::models::{AttendanceRecord, RecordType};
 use crate::database::queries;
-use chrono::{DateTime, Utc, NaiveDate};
-use sqlx::SqlitePool;
 use anyhow::Result;
+use chrono::{DateTime, NaiveDate, Utc};
+use sqlx::SqlitePool;
 
 pub struct SessionManager {
     pool: SqlitePool,
@@ -34,19 +34,20 @@ impl SessionManager {
 
     /// 既存のセッションを削除
     async fn delete_existing_sessions(&self, user_id: i64, date: NaiveDate) -> Result<()> {
-        sqlx::query(
-            "DELETE FROM work_sessions WHERE user_id = ? AND date = ?"
-        )
-        .bind(user_id)
-        .bind(date)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("DELETE FROM work_sessions WHERE user_id = ? AND date = ?")
+            .bind(user_id)
+            .bind(date)
+            .execute(&self.pool)
+            .await?;
 
         Ok(())
     }
 
     /// 記録からセッションデータを構築
-    fn build_sessions_from_records(&self, records: Vec<AttendanceRecord>) -> Result<Vec<SessionData>> {
+    fn build_sessions_from_records(
+        &self,
+        records: Vec<AttendanceRecord>,
+    ) -> Result<Vec<SessionData>> {
         let mut sessions = Vec::new();
         let mut current_start: Option<DateTime<Utc>> = None;
 
@@ -55,14 +56,19 @@ impl SessionManager {
                 RecordType::Start => {
                     // 既に開始済みの場合は警告（後で検証機能で対応）
                     if current_start.is_some() {
-                        tracing::warn!("Multiple start records without end: user_id={}, record_id={}", record.user_id, record.id);
+                        tracing::warn!(
+                            "Multiple start records without end: user_id={}, record_id={}",
+                            record.user_id,
+                            record.id
+                        );
                     }
                     current_start = Some(record.timestamp);
                 }
                 RecordType::End => {
                     if let Some(start_time) = current_start.take() {
                         // ペア完成
-                        let total_minutes = record.timestamp
+                        let total_minutes = record
+                            .timestamp
                             .signed_duration_since(start_time)
                             .num_minutes() as i32;
 
@@ -74,7 +80,11 @@ impl SessionManager {
                         });
                     } else {
                         // 開始なしの終了記録（後で検証機能で対応）
-                        tracing::warn!("End record without start: user_id={}, record_id={}", record.user_id, record.id);
+                        tracing::warn!(
+                            "End record without start: user_id={}, record_id={}",
+                            record.user_id,
+                            record.id
+                        );
                     }
                 }
             }
@@ -94,7 +104,12 @@ impl SessionManager {
     }
 
     /// セッションをデータベースに作成
-    async fn create_session(&self, user_id: i64, session_data: SessionData, date: NaiveDate) -> Result<()> {
+    async fn create_session(
+        &self,
+        user_id: i64,
+        session_data: SessionData,
+        date: NaiveDate,
+    ) -> Result<()> {
         sqlx::query(
             "INSERT INTO work_sessions (user_id, start_time, end_time, total_minutes, date, is_completed)
              VALUES (?, ?, ?, ?, ?, ?)"
@@ -112,8 +127,16 @@ impl SessionManager {
     }
 
     /// 記録追加・修正・削除後のセッション再計算のトリガー
-    pub async fn trigger_recalculation(&self, user_id: i64, affected_date: NaiveDate) -> Result<()> {
-        tracing::info!("Triggering session recalculation for user_id={}, date={}", user_id, affected_date);
+    pub async fn trigger_recalculation(
+        &self,
+        user_id: i64,
+        affected_date: NaiveDate,
+    ) -> Result<()> {
+        tracing::info!(
+            "Triggering session recalculation for user_id={}, date={}",
+            user_id,
+            affected_date
+        );
         self.recalculate_sessions(user_id, affected_date).await
     }
 }
