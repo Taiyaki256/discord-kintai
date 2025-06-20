@@ -237,7 +237,21 @@ cargo fmt
 
 # Linting
 cargo clippy
+
+# セキュリティ監査
+cargo audit
+
+# コードカバレッジ (要 cargo-tarpaulin)
+cargo tarpaulin --verbose --all-features --workspace
 ```
+
+### CI/CD
+プロジェクトはGitHub Actionsを使用してCI/CDパイプラインを構築しています：
+
+- **継続的インテグレーション**: プルリクエストごとにテスト、リント、フォーマットチェックを実行
+- **セキュリティ監査**: 依存関係の脆弱性を定期的にチェック
+- **コードカバレッジ**: CI環境でのテストカバレッジ測定
+- **依存関係更新**: 週次で依存関係の更新PRを自動作成
 
 ## TODO
 
@@ -261,7 +275,11 @@ cargo clippy
   - [x] **重複時間検証** - 同時刻記録の防止
 - [x] テストの追加
   - [x] **Format機能テスト** - format.rsモジュールの包括的テスト
-- [ ] CI/CD設定
+- [x] CI/CD設定
+  - [x] **GitHub Actions** - テスト、リント、フォーマットチェック
+  - [x] **セキュリティ監査** - cargo auditによる脆弱性チェック
+  - [x] **コードカバレッジ** - tarpaulinによるローカルカバレッジ測定
+  - [x] **依存関係更新** - 自動依存関係更新PRの作成
 
 ## 実装予定の修正機能詳細
 
