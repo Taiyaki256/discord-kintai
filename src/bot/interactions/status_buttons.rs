@@ -618,7 +618,8 @@ async fn handle_time_edit_modal(
     // Get time input from modal
     let time_input = interaction
         .data
-        .components.first()
+        .components
+        .first()
         .and_then(|row| row.components.first())
         .and_then(|component| {
             if let serenity::ActionRowComponent::InputText(input) = component {
@@ -816,7 +817,8 @@ async fn handle_add_start_modal(
 ) -> Result<(), Error> {
     let time_input = interaction
         .data
-        .components.first()
+        .components
+        .first()
         .and_then(|row| row.components.first())
         .and_then(|component| {
             if let serenity::ActionRowComponent::InputText(input) = component {
@@ -971,7 +973,8 @@ async fn handle_add_end_modal(
 ) -> Result<(), Error> {
     let time_input = interaction
         .data
-        .components.first()
+        .components
+        .first()
         .and_then(|row| row.components.first())
         .and_then(|component| {
             if let serenity::ActionRowComponent::InputText(input) = component {

@@ -3,9 +3,7 @@ use crate::database::models::RecordType;
 use crate::database::queries;
 use crate::utils::format::{create_error_embed, create_success_embed};
 use crate::utils::session_manager::SessionManager;
-use crate::utils::time::{
-    get_current_datetime_jst, get_date_from_utc_timestamp,
-};
+use crate::utils::time::{get_current_datetime_jst, get_date_from_utc_timestamp};
 
 /// 勤務を開始します
 #[poise::command(slash_command)]
